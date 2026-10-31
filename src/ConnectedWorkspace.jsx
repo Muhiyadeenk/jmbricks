@@ -6,7 +6,7 @@ import { supabase } from './lib/supabase';
 import { useAuth } from './auth/AuthProvider';
 import Operations from './operations/Operations';
 const pages = [ ['Dashboard','/',LayoutDashboard], ['Sales','/sales',ShoppingBag], ['Purchases','/purchases',ShoppingCart], ['Stock Management','/stock',Package], ['Production','/production',Factory], ['Expenses','/expenses',Wallet], ['Reports','/reports',ChartNoAxesCombined], ['Settings','/settings',Settings] ];
-const bottomNavPages = [ ['Dashboard','/',LayoutDashboard], ['Sales','/sales',ShoppingBag], ['Production','/production',Factory], ['Stock','/stock',Package] ];
+const bottomNavPages = [ ['Home','/',LayoutDashboard], ['Sales','/sales',ShoppingBag], ['Production','/production',Factory], ['Stock','/stock',Package] ];
 export default function ConnectedWorkspace() {
   const { session, signOut } = useAuth();
   const location = useLocation();
