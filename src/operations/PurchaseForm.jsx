@@ -514,10 +514,10 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
           <Field
             label={`Quantity (${materialUnit.toUpperCase()})`}
             type="number"
-            min="0.001"
+            min={['bag', 'load', 'unit', 'trip'].includes(materialUnit) ? '1' : '0.001'}
             max="1000000000"
-            step={['bag', 'load', 'unit', 'trip'].includes(materialUnit) ? '1' : '0.001'}
-            placeholder="e.g. 50"
+            step={['bag', 'load', 'unit', 'trip'].includes(materialUnit) ? '1' : 'any'}
+            placeholder={['bag', 'load', 'unit', 'trip'].includes(materialUnit) ? 'e.g. 50' : 'e.g. 15.5'}
             required
             value={quantity}
             onChange={e => setQuantity(e.target.value)}
@@ -528,7 +528,7 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
             type="number"
             min="0"
             max="1000000000"
-            step="0.01"
+            step="any"
             placeholder="e.g. 380"
             required
             value={rate}
@@ -580,7 +580,7 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
               type="number"
               min="0"
               max="1000000000"
-              step="0.01"
+              step="any"
               value={amountPaid}
               disabled={paymentStatus === 'pending'}
               placeholder="0.00"
