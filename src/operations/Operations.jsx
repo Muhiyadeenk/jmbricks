@@ -74,21 +74,211 @@ function StockPage({catalog,settings,owner,open,onHistory}){
  const [search,setSearch]=useState(''),[filter,setFilter]=useState('all');
  const status=p=>!p.is_stocked?'Not tracked':Number(p.available_quantity)===0?'Out of Stock':Number(p.available_quantity)<=Number(p.minimum_stock)?'Low Stock':'In Stock';
  const list=catalog.products.filter(p=>`${p.name} ${p.code} ${p.size_label||''}`.toLowerCase().includes(search.toLowerCase())&&(filter==='all'||filter==='inactive'&&!p.is_active||filter==='finished_brick'&&p.kind===filter||filter==='raw_material'&&p.kind===filter||String(p.brick_size)===filter||status(p)===filter));
- return <div className="stock-refresh"><div className="stock-intro"><div><span className="eyebrow">JM BRICKS · INVENTORY</span><h2>Your yard at a glance.</h2><p>Every size. Every brick. Ready for your next order.</p></div><Link className="btn secondary" to="/production">Go to Production →</Link></div><div className="toolbar"><div className="search"><Search size={18}/><input aria-label="Search products" placeholder="Search product name, code or size…" value={search} onChange={e=>setSearch(e.target.value)}/></div><select aria-label="Filter products" value={filter} onChange={e=>setFilter(e.target.value)}>{[['all','All products'],... [4,5,6,8].map(s=>[String(s),`${s}-inch`]),['finished_brick','Finished bricks'],['raw_material','Raw / other materials'],['Low Stock','Low Stock'],['Out of Stock','Out of Stock'],['inactive','Inactive']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></div><div className="stock-layout"><div className="product-grid">{[4,5,6,8].filter(size=>!catalog.products.some(p=>Number(p.brick_size)===size)&&(filter==='all'||filter===String(size))&&!search).map(size=><Card key={`missing-${size}`} className="product-card unconfigured"><div className="product-top"><span>BRICK COLLECTION</span><Badge tone="neutral">Setup needed</Badge></div><div className="brick-stage"><span className="stock-size">{size}<small>INCH</small></span><Brick/></div><h3>{size}-inch Brick</h3><div className="stock-pending"><strong>—</strong><span>Stock available after setup</span></div><Link className="stock-setup" to="/production">Configure this brick <span>↗</span></Link></Card>)}{list.length?list.map(p=><Card className="product-card" key={p.id}><div className="product-top"><span>{p.code}</span><Badge tone={status(p)==='In Stock'?'green':status(p)==='Low Stock'?'amber':'neutral'}>{!p.is_active?'Inactive':status(p)}</Badge></div><div className="brick-stage">{p.brick_size&&<span className="stock-size">{p.brick_size}<small>INCH</small></span>}{p.kind==='finished_brick'?<Brick/>:<Package size={68} color="#708c76"/>}</div><h3>{p.name}</h3><p>{p.kind==='finished_brick'?`${p.length_mm} × ${p.width_mm} × ${p.height_mm} mm`:p.unit}{p.size_label?` · ${p.size_label}`:''}</p><div className="product-numbers"><div><strong>{p.is_stocked?number(p.available_quantity):'—'}</strong><small>{p.is_stocked?`${p.unit} available`:'Not stocked'}</small></div><b>{currency(p.selling_price,settings.currency)}<small>selling price / {p.unit}</small></b></div><div className="product-footer">Minimum stock<strong>{number(p.minimum_stock)}</strong></div><div className="product-footer">Stock value<strong>{p.inventory_value==null?'Unknown':currency(p.inventory_value,settings.currency)}</strong></div>{[['total_produced','Total production'],['total_sold','Total sold'],['total_rejected','Rejected bricks'],['other_stock_change','Other receipts / adjustments']].map(([key,label])=><div className="product-footer" key={key}>{label}<strong>{number(p[key]||0)}</strong></div>)}<div className="product-footer">Last production<strong>{displayDate(p.last_production_date)}</strong></div><div className="product-buttons">{p.is_stocked&&<><Button variant="secondary" onClick={()=>onHistory(p)}><History size={14}/>History</Button></>}</div></Card>):catalog.products.length===0&&!search&&filter==='all'?null:<Card><EmptyState title="No products found" description="Configure products in Production, or change the filter."/></Card>}</div><Card className="inventory-aside"><span className="eyebrow">YOUR STOCK, CLEARLY</span><Brick/><h2>Every brick.<br/>Every movement.</h2><p>Production adds good bricks. Sales deduct them. Material purchases change only their own inventory.</p><div className="inventory-tip"><div><strong>Opening balances & corrections</strong><p>Use an owner-authorized adjustment with a reason. Stock entries must not predate the latest movement for that product.</p></div></div><p>Unknown costs remain unknown until that stock is fully used. Confirm costs before relying on profit estimates.</p></Card></div></div>;
+ return (
+   <div className="stock-refresh">
+     <div className="stock-intro">
+       <div>
+         <span className="eyebrow">JM BRICKS · INVENTORY</span>
+         <h2>Your yard & raw materials at a glance.</h2>
+         <p>Finished bricks and manufacturing materials ready for daily production.</p>
+       </div>
+       <Link className="btn secondary" to="/production">Go to Production →</Link>
+     </div>
+     <div className="toolbar">
+       <div className="search">
+         <Search size={18}/>
+         <input aria-label="Search products" placeholder="Search product name, code or raw material…" value={search} onChange={e=>setSearch(e.target.value)}/>
+       </div>
+       <select aria-label="Filter products" value={filter} onChange={e=>setFilter(e.target.value)}>
+         {[['all','All inventory'],... [4,5,6,8].map(s=>[String(s),`${s}-inch bricks`]),['finished_brick','Finished bricks only'],['raw_material','Raw materials only (Cement, Sand, Dust)'],['Low Stock','Low Stock'],['Out of Stock','Out of Stock'],['inactive','Inactive']].map(([v,l])=><option key={v} value={v}>{l}</option>)}
+       </select>
+     </div>
+     <div className="stock-layout">
+       <div className="product-grid">
+         {[4,5,6,8].filter(size=>!catalog.products.some(p=>Number(p.brick_size)===size)&&(filter==='all'||filter==='finished_brick'||filter===String(size))&&!search).map(size=><Card key={`missing-${size}`} className="product-card unconfigured"><div className="product-top"><span>BRICK COLLECTION</span><Badge tone="neutral">Setup needed</Badge></div><div className="brick-stage"><span className="stock-size">{size}<small>INCH</small></span><Brick/></div><h3>{size}-inch Brick</h3><div className="stock-pending"><strong>—</strong><span>Stock available after setup</span></div><Link className="stock-setup" to="/production">Configure this brick <span>↗</span></Link></Card>)}
+         {list.length?list.map(p=>(
+           <Card className="product-card" key={p.id}>
+             <div className="product-top">
+               <span>{p.code}</span>
+               <Badge tone={status(p)==='In Stock'?'green':status(p)==='Low Stock'?'amber':'neutral'}>{!p.is_active?'Inactive':status(p)}</Badge>
+             </div>
+             <div className="brick-stage">
+               {p.brick_size&&<span className="stock-size">{p.brick_size}<small>INCH</small></span>}
+               {p.kind==='finished_brick'?<Brick/>:<Package size={68} color="#2b6b47"/>}
+             </div>
+             <h3>{p.name}</h3>
+             <p>{p.kind==='finished_brick'?`${p.length_mm} × ${p.width_mm} × ${p.height_mm} mm`:p.unit}{p.size_label?` · ${p.size_label}`:''}</p>
+             <div className="product-numbers">
+               <div>
+                 <strong>{p.is_stocked?number(p.available_quantity):'—'}</strong>
+                 <small>{p.is_stocked?`${p.unit} ${p.kind==='raw_material'?'in stock':'available'}`:'Not stocked'}</small>
+               </div>
+               {p.kind==='finished_brick'?(
+                 <b>{currency(p.selling_price,settings.currency)}<small>selling price / {p.unit}</small></b>
+               ):(
+                 <b>Raw Material<small>For brick production</small></b>
+               )}
+             </div>
+             <div className="product-footer">Minimum stock<strong>{number(p.minimum_stock)}</strong></div>
+             <div className="product-footer">Stock value<strong>{p.inventory_value==null?'Unknown':currency(p.inventory_value,settings.currency)}</strong></div>
+             {p.kind==='finished_brick'?(
+               <>
+                 {[['total_produced','Total production'],['total_sold','Total sold'],['total_rejected','Rejected bricks'],['other_stock_change','Other receipts / adjustments']].map(([key,label])=><div className="product-footer" key={key}>{label}<strong>{number(p[key]||0)}</strong></div>)}
+                 <div className="product-footer">Last production<strong>{displayDate(p.last_production_date)}</strong></div>
+               </>
+             ):(
+               <div className="product-footer">Purchased / Added<strong>{number(p.other_stock_change||0)} {p.unit}</strong></div>
+             )}
+             <div className="product-buttons">
+               {p.is_stocked&&<Button variant="secondary" onClick={()=>onHistory(p)}><History size={14}/>History</Button>}
+             </div>
+           </Card>
+         )):catalog.products.length===0&&!search&&filter==='all'?null:<Card><EmptyState title="No items found" description="Change your search or filter to see inventory."/></Card>}
+       </div>
+       <Card className="inventory-aside">
+         <span className="eyebrow">YOUR STOCK, CLEARLY</span>
+         <Brick/>
+         <h2>Every brick.<br/>Every material.</h2>
+         <p>Purchases add raw materials (Cement, M-Sand, P-Sand, Dust). Daily production converts materials into finished bricks. Sales deliver finished bricks.</p>
+         <div className="inventory-tip">
+           <div>
+             <strong>Opening balances & corrections</strong>
+             <p>Use an owner-authorized adjustment with a reason. Stock entries must not predate the latest movement for that product.</p>
+           </div>
+         </div>
+         <p>Maintain accurate raw material stocks to easily plan upcoming production runs.</p>
+       </Card>
+     </div>
+   </div>
+ );
 }
 function HistoryPage({kind,revision,catalog,settings,canWrite,owner,open,onDetail}){
  const [filters,setFilters]=useState({search:'',from:'',to:'',category:'',status:'active'}),[page,setPage]=useState(0),[result,setResult]=useState({rows:[],count:0}),[loading,setLoading]=useState(true),[error,setError]=useState('');
+ const [purchaseItemsMap,setPurchaseItemsMap]=useState({});
  const change=(key,value)=>{setFilters(f=>({...f,[key]:value}));setPage(0)};
  useEffect(()=>{let alive=true;setLoading(true);setError('');const timer=setTimeout(()=>{history(kind,filters,page).then(r=>{if(alive)setResult(r)}).catch(e=>{if(alive)setError(e.message)}).finally(()=>{if(alive)setLoading(false)})},200);return()=>{alive=false;clearTimeout(timer)}},[kind,filters,page,revision]);
+
+ useEffect(()=>{
+   if(kind!=='purchases'||!result.rows.length){setPurchaseItemsMap({});return;}
+   let alive=true;
+   const ids=result.rows.map(r=>r.id);
+   supabase.from('purchase_items').select('purchase_id,product_name,quantity,unit,description').in('purchase_id',ids).then(({data,error})=>{
+     if(alive&&data&&!error){
+       const map={};
+       data.forEach(it=>{
+         if(!map[it.purchase_id])map[it.purchase_id]=[];
+         map[it.purchase_id].push(it);
+       });
+       setPurchaseItemsMap(map);
+     }
+   });
+   return()=>{alive=false};
+ },[kind,result.rows]);
+
+ function getPurchaseSummary(r){
+   const items=purchaseItemsMap[r.id]||[];
+   if(!items.length)return{material:'Raw Material',quantity:'—'};
+   const material=items.map(i=>i.product_name||i.description||'Raw Material').join(', ');
+   const quantity=items.map(i=>`${i.quantity}${i.unit?` ${i.unit}`:''}`).join(', ');
+   return{material,quantity};
+ }
+
+ function getPaymentBadge(r){
+   const out=Number(r.outstanding_balance||0),tot=Number(r.total||0);
+   if(out<=0)return <Badge tone="green">Paid</Badge>;
+   if(out<tot&&out>0)return <Badge tone="amber">Partial</Badge>;
+   return <Badge tone="amber">Pending</Badge>;
+ }
+
  const f=formats[kind];
  const cols=[{key:f.date,label:'Date'},{key:f.search,label:kind==='sales'?'Customer':kind==='purchases'?'Supplier':kind==='production'?'Product':'Description'}];
+ if(kind==='purchases'){
+   cols.push(
+     {key:'raw_material',label:'Raw Material',render:r=>getPurchaseSummary(r).material},
+     {key:'quantity',label:'Quantity',render:r=>getPurchaseSummary(r).quantity}
+   );
+ }
  if(kind==='production')cols.push({key:'quantity_produced',label:'Produced'},{key:'rejected_quantity',label:'Rejected'},{key:'net_quantity',label:'Net quantity'});
  else cols.push({key:kind==='expenses'?'amount':'total',label:'Total',render:r=>currency(kind==='expenses'?r.amount:r.total,r.currency)});
- if(['sales','purchases'].includes(kind))cols.push({key:'outstanding_balance',label:'Outstanding',render:r=><Badge tone= {Number(r.outstanding_balance)>0?'amber':'green'}>{currency(r.outstanding_balance,r.currency)}</Badge>});
+ if(kind==='purchases')cols.push({key:'payment_status',label:'Payment',render:r=>getPaymentBadge(r)});
+ if(['sales','purchases'].includes(kind))cols.push({key:'outstanding_balance',label:'Outstanding',render:r=><Badge tone={Number(r.outstanding_balance)>0?'amber':'green'}>{currency(r.outstanding_balance,r.currency)}</Badge>});
  if(kind==='expenses')cols.push({key:'category_name',label:'Category'});
  cols.push({key:'status',label:'Status',render:r=><Badge tone={r.deleted_at?'neutral':'green'}>{r.deleted_at?'Deleted':'Active'}</Badge>});
  if(owner)cols.push({key:'delete',label:'Action',render:r=>!r.deleted_at&&<Button variant="secondary" className="delete-action" onClick={()=>open(`delete_${f.operation}`,{transaction_id:r.id})}><Trash2 size={14}/>Delete</Button>});
- return <><div className="toolbar"><div className="search"><Search size={18}/><input aria-label="Search records" placeholder={`Search ${kind==='sales'?'customers':kind==='purchases'?'suppliers':kind==='production'?'products':'descriptions'}…`} value={filters.search} onChange={e=>change('search',e.target.value)}/></div><Field label="From" type="date" value={filters.from} onChange={e=>change('from',e.target.value)}/><Field label="To" type="date" min={filters.from} value={filters.to} onChange={e=>change('to',e.target.value)}/>{kind==='expenses'&&<select aria-label="Expense category" value={filters.category} onChange={e=>change('category',e.target.value)}><option value="">All categories</option>{catalog.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}<select aria-label="Record status" value={filters.status} onChange={e=>change('status',e.target.value)}><option value="active">Active entries</option><option value="deleted">Deleted entries</option><option value="all">All entries</option></select>{canWrite&&<Button onClick={()=>open(f.operation)}><Plus size={16}/>{titles[f.operation]}</Button>}{kind==='expenses'&&owner&&<Button variant="secondary" onClick={()=>open('category')}>Add category</Button>}</div><Card><SectionTitle title={`${f.title} history`} subtitle={`${result.count} matching records · 25 per page`}/>{loading?<div className="empty" role="status">Loading records…</div>:error?<p className="auth-error" role="alert">{error}</p>:<Table rows={result.rows} columns={cols} onRow={row=>onDetail(row.id)}/>}<Pagination page={page} count={result.count} setPage={setPage}/></Card></>;
+
+ return (
+   <>
+     <div className="toolbar">
+       <div className="search">
+         <Search size={18}/>
+         <input aria-label="Search records" placeholder={`Search ${kind==='sales'?'customers':kind==='purchases'?'suppliers':kind==='production'?'products':'descriptions'}…`} value={filters.search} onChange={e=>change('search',e.target.value)}/>
+       </div>
+       <Field label="From" type="date" value={filters.from} onChange={e=>change('from',e.target.value)}/>
+       <Field label="To" type="date" min={filters.from} value={filters.to} onChange={e=>change('to',e.target.value)}/>
+       {kind==='expenses'&&<select aria-label="Expense category" value={filters.category} onChange={e=>change('category',e.target.value)}><option value="">All categories</option>{catalog.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
+       <select aria-label="Record status" value={filters.status} onChange={e=>change('status',e.target.value)}><option value="active">Active entries</option><option value="deleted">Deleted entries</option><option value="all">All entries</option></select>
+       {canWrite&&<Button onClick={()=>open(f.operation)}><Plus size={16}/>{titles[f.operation]}</Button>}
+       {kind==='expenses'&&owner&&<Button variant="secondary" onClick={()=>open('category')}>Add category</Button>}
+     </div>
+     <Card>
+       <SectionTitle title={`${f.title} history`} subtitle={`${result.count} matching records · 25 per page`}/>
+       {loading?<div className="empty" role="status">Loading records…</div>:error?<p className="auth-error" role="alert">{error}</p>:kind==='purchases'?(
+         <>
+           <div className="purchase-desktop-table">
+             <Table rows={result.rows} columns={cols} onRow={row=>onDetail(row.id)}/>
+           </div>
+           <div className="purchase-mobile-cards">
+             {result.rows.length===0?<EmptyState title="No purchases recorded" description="Click 'Purchase raw material' to record material purchases."/>:result.rows.map(r=>{
+               const summary=getPurchaseSummary(r);
+               return (
+                 <div className="purchase-card" key={r.id}>
+                   <div className="purchase-card-header">
+                     <div>
+                       <div className="purchase-card-supplier">{r.supplier_name||'Unknown supplier'}</div>
+                       <div className="purchase-card-date">{r.purchase_date}{r.reference_number?` · Ref: P-${r.reference_number}`:''}</div>
+                     </div>
+                     <div>{getPaymentBadge(r)}</div>
+                   </div>
+                   <div className="purchase-card-grid">
+                     <div className="purchase-card-stat full-width">
+                       <span className="purchase-card-label">Raw Material</span>
+                       <strong className="purchase-card-val material-pill">📦 {summary.material}</strong>
+                     </div>
+                     <div className="purchase-card-stat">
+                       <span className="purchase-card-label">Quantity</span>
+                       <strong className="purchase-card-val">{summary.quantity}</strong>
+                     </div>
+                     <div className="purchase-card-stat">
+                       <span className="purchase-card-label">Total Amount</span>
+                       <strong className="purchase-card-val total-amount">{currency(r.total,r.currency)}</strong>
+                     </div>
+                     {Number(r.outstanding_balance)>0&&(
+                       <div className="purchase-card-stat">
+                         <span className="purchase-card-label">Balance Due</span>
+                         <strong className="purchase-card-val balance-due">{currency(r.outstanding_balance,r.currency)}</strong>
+                       </div>
+                     )}
+                     <div className="purchase-card-stat">
+                       <span className="purchase-card-label">Status</span>
+                       <span style={{fontSize:'13px',fontWeight:600,color:r.deleted_at?'#b42318':'#2e6945'}}>{r.deleted_at?'Deleted':'Active'}</span>
+                     </div>
+                   </div>
+                   <div className="purchase-card-actions">
+                     <Button variant="secondary" onClick={()=>onDetail(r.id)}>View Details</Button>
+                     {owner&&!r.deleted_at&&<Button variant="secondary" className="delete-action" onClick={()=>open(`delete_${f.operation}`,{transaction_id:r.id})}><Trash2 size={16}/>Delete</Button>}
+                   </div>
+                 </div>
+               );
+             })}
+           </div>
+         </>
+       ):(
+         <Table rows={result.rows} columns={cols} onRow={row=>onDetail(row.id)}/>
+       )}
+       <Pagination page={page} count={result.count} setPage={setPage}/>
+     </Card>
+   </>
+ );
 }
 function Pagination({page,count,setPage}){return <div className="pagination"><Button variant="secondary" disabled={!page} onClick={()=>setPage(p=>p-1)}>Previous</Button><span>Page {page+1} of {Math.max(1,Math.ceil(count/25))}</span><Button variant="secondary" disabled={(page+1)*25>=count} onClick={()=>setPage(p=>p+1)}>Next</Button></div>}
 function TransactionDetail({kind,id,settings,canWrite,owner,onClose,onPayment}){

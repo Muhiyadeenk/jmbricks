@@ -56,8 +56,12 @@
 .mobile-close-btn,
 .mobile-brand-icon,
 .dialog-pull-bar,
-.mobile-drawer-logout {
+.mobile-drawer-logout,
+.purchase-mobile-cards {
   display: none;
+}
+.purchase-desktop-table {
+  display: block;
 }
 .sidebar-brand-row {
   display: contents;
@@ -614,6 +618,100 @@ html, body {
     font-size: 14px;
     font-weight: 600;
     border-radius: 10px;
+  }
+
+  /* ── PURCHASE MOBILE CARDS ─────────────────────────────────────────────────── */
+  .purchase-desktop-table {
+    display: none !important;
+  }
+  .purchase-mobile-cards {
+    display: flex !important;
+    flex-direction: column;
+    gap: 14px;
+    margin: 16px 0;
+  }
+  .purchase-card {
+    background: #ffffff;
+    border: 1.5px solid #dce8de;
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 2px 6px rgba(20, 50, 30, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .purchase-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    border-bottom: 1px solid #edf2ee;
+    padding-bottom: 10px;
+  }
+  .purchase-card-supplier {
+    font-size: 17px;
+    font-weight: 700;
+    color: #132e1e;
+    line-height: 1.3;
+  }
+  .purchase-card-date {
+    font-size: 13px;
+    color: #617568;
+    margin-top: 3px;
+    font-weight: 500;
+  }
+  .purchase-card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 14px;
+    background: #fafdfa;
+    border: 1px solid #e7f0e8;
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .purchase-card-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .purchase-card-stat.full-width {
+    grid-column: 1 / -1;
+  }
+  .purchase-card-label {
+    font-size: 12px;
+    color: #6a7c70;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+  .purchase-card-val {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1a4a2e;
+  }
+  .purchase-card-val.material-pill {
+    color: #124b2b;
+    font-size: 16px;
+  }
+  .purchase-card-val.total-amount {
+    font-size: 17px;
+    color: #132e1e;
+  }
+  .purchase-card-val.balance-due {
+    color: #b42318;
+  }
+  .purchase-card-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .purchase-card-actions .btn {
+    flex: 1;
+    min-height: 48px !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    border-radius: 10px !important;
+    justify-content: center;
   }
   .pagination span {
     font-size: 13px;
