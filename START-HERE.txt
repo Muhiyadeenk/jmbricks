@@ -1,0 +1,11 @@
+JM Bricks - latest Vercel source package
+31 October 2026
+Source: 92c9e67ece386bbff7b28fc28372719d107b85fe
+
+Includes production counts, automatic product selection, and owner Delete buttons for Production, Sales, Purchases and Expenses. Deletions retain audit records. Production deletes whole sessions and reverses completed stock, provided sufficient stock remains. Purchases with later stock movements cannot be deleted.
+
+Extract ZIP, upload source to a private Git repository, then import into Vercel. Framework: Vite. Build: npm run build. Output: dist.
+Uses the existing configured Supabase project. Required updates have already been applied to that project. Do not recreate the database or rerun old migrations. This package contains no business-data backup or passwords.
+Add your Vercel URL to Supabase Authentication URL configuration, including password recovery redirect /?recovery=1.
+
+Build and local database tests passed. Browser preview testing was unavailable.

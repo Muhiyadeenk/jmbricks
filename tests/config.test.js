@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { validateSupabaseConfig } from '../src/lib/config.js';
+const url = 'https://example.supabase.co';
+const key = 'sb_publishable_example_public_key';
+const jwt = role => `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify({ role })).toString('base64url')}.signature`;
+test('unconfigured project remains in setup mode', () => assert.deepEqual(validateSupabaseConfig(), { configured: false, error: null }));
+test('partial configuration never starts a client', () => { assert.equal(validateSupabaseConfig(url).configured, false); assert.equal(validateSupabaseConfig('',key).configured,false); });
+test('publishable and legacy anon keys supported', () => { assert.equal(validateSupabaseConfig(url,key).configured,true); assert.equal(validateSupabaseConfig(url,jwt('anon')).configured,true); });
+test('secret and service-role keys rejected', () => { for(const bad of ['sb_secret_example',jwt('service_role'),jwt('authenticated'),'invalid']) assert.equal(validateSupabaseConfig(url,bad).configured,false); });
+test('HTTPS required except for local development', () => { assert.equal(validateSupabaseConfig('http://example.com',key).configured,false); assert.equal(validateSupabaseConfig('http://localhost:54321',key).configured,true); });
+test('malformed URLs and embedded credentials rejected', () => { for(const bad of ['not a url','https://user:password@example.com','https://example.com?token=key','https://example.com/path']) assert.equal(validateSupabaseConfig(bad,key).configured,false); });
