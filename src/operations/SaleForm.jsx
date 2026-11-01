@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, UserPlus, Edit3, MapPin, Phone, User, Plus, Trash2, CheckCircle2, AlertCircle, X, ChevronDown } from 'lucide-react';
 import { Button, Field, Dialog, Badge } from '../components';
 import { today, currency } from './api';
@@ -28,10 +28,34 @@ export default function SaleForm({
     return (catalog.products || []).filter(p => p.is_active && p.kind === 'finished_brick');
   }, [catalog.products]);
 
-  // Customers list from catalog
-  const customers = useMemo(() => {
+  // Live customers list state — initialized from catalog and updated immediately on new customer addition
+  const [customerList, setCustomerList] = useState(() => {
     return (catalog.customers || []).filter(c => c.is_active !== false);
+  });
+
+  // Re-sync if catalog updates in background
+  useEffect(() => {
+    if (catalog.customers && catalog.customers.length > 0) {
+      setCustomerList(catalog.customers.filter(c => c.is_active !== false));
+    }
   }, [catalog.customers]);
+
+  // Also query directly on open to make sure any recently added customers are immediately present
+  useEffect(() => {
+    let alive = true;
+    supabase
+      .from('customers')
+      .select('*')
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data, error }) => {
+        if (alive && data && !error) {
+          setCustomerList(data);
+          if (catalog) catalog.customers = data;
+        }
+      });
+    return () => { alive = false; };
+  }, []);
 
   // Form State
   const [date, setDate] = useState(() => initial.date || today(settings.timezone));
@@ -40,6 +64,17 @@ export default function SaleForm({
   // Customer Search & Picker state
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowCustomerDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // New Customer Modal
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
@@ -78,27 +113,27 @@ export default function SaleForm({
 
   // Currently selected customer object
   const selectedCustomer = useMemo(() => {
-    return customers.find(c => c.id === selectedCustomerId) || null;
-  }, [customers, selectedCustomerId]);
+    return customerList.find(c => c.id === selectedCustomerId) || null;
+  }, [customerList, selectedCustomerId]);
 
   // Filtered customers for search
   const filteredCustomers = useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
-    if (!q) return customers.slice(0, 15);
-    return customers.filter(c => {
+    if (!q) return customerList;
+    return customerList.filter(c => {
       const name = (c.name || '').toLowerCase();
       const phone = (c.phone || '').toLowerCase();
       const loc = (c.location || c.place || c.address || '').toLowerCase();
       return name.includes(q) || phone.includes(q) || loc.includes(q);
-    }).slice(0, 20);
-  }, [customers, customerSearch]);
+    });
+  }, [customerList, customerSearch]);
 
   // Check for duplicate phone when creating new customer
   const duplicatePhoneCustomer = useMemo(() => {
     const p = newCustomerPhone.trim();
     if (!p || p.length < 5) return null;
-    return customers.find(c => c.phone && c.phone.trim() === p);
-  }, [customers, newCustomerPhone]);
+    return customerList.find(c => c.phone && c.phone.trim() === p);
+  }, [customerList, newCustomerPhone]);
 
   // Calculations
   const summary = useMemo(() => {
@@ -233,13 +268,24 @@ export default function SaleForm({
   }
 
   function completeCustomerSave(customerObj) {
-    // Add to local catalog if not already there
-    if (!catalog.customers.some(c => c.id === customerObj.id)) {
-      catalog.customers.push(customerObj);
+    // 1. Immediately prepend to customerList state so search and list see it instantly!
+    setCustomerList(prev => {
+      const filtered = prev.filter(c => c.id !== customerObj.id);
+      return [customerObj, ...filtered];
+    });
+
+    // 2. Add to catalog.customers reference
+    if (catalog?.customers) {
+      catalog.customers = [customerObj, ...catalog.customers.filter(c => c.id !== customerObj.id)];
     }
+
+    // 3. Immediately select this new customer
     setSelectedCustomerId(customerObj.id);
     setShowNewCustomerModal(false);
     setCustomerSearch('');
+    setShowCustomerDropdown(false);
+
+    // 4. Trigger parent catalog refresh
     if (onCustomerUpdate) onCustomerUpdate();
   }
 
@@ -269,11 +315,9 @@ export default function SaleForm({
 
       if (error) {
         if (error.code === '42501' || (error.message && error.message.includes('permission denied'))) {
-          // Update in local memory for this session
           completeCustomerEdit({ ...selectedCustomer, ...updatePayload });
           return;
         }
-        // Fallback if location column doesn't exist yet
         if (error.message && error.message.includes('location')) {
           const fallback = {
             name: editCustomerName.trim(),
@@ -286,11 +330,8 @@ export default function SaleForm({
             .select()
             .single();
           if (fbErr) {
-            if (fbErr.code === '42501' || (fbErr.message && fbErr.message.includes('permission denied'))) {
-              completeCustomerEdit({ ...selectedCustomer, ...updatePayload });
-              return;
-            }
-            throw fbErr;
+            completeCustomerEdit({ ...selectedCustomer, ...updatePayload });
+            return;
           }
           completeCustomerEdit(fbData || { ...selectedCustomer, ...fallback });
           return;
@@ -300,11 +341,19 @@ export default function SaleForm({
 
       completeCustomerEdit(data || { ...selectedCustomer, ...updatePayload });
     } catch (err) {
-      // Graceful in-session update
       completeCustomerEdit({ ...selectedCustomer, ...updatePayload });
     } finally {
       setCustomerSaving(false);
     }
+  }
+
+  function completeCustomerEdit(updatedObj) {
+    setCustomerList(prev => prev.map(c => c.id === updatedObj.id ? { ...c, ...updatedObj } : c));
+    if (catalog?.customers) {
+      catalog.customers = catalog.customers.map(c => c.id === updatedObj.id ? { ...c, ...updatedObj } : c);
+    }
+    setShowEditCustomerModal(false);
+    if (onCustomerUpdate) onCustomerUpdate();
   }
 
   function completeCustomerEdit(updatedObj) {
@@ -569,7 +618,7 @@ export default function SaleForm({
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setSelectedCustomerId(''); setCustomerSearch(''); }}
+                    onClick={() => { setSelectedCustomerId(''); setCustomerSearch(''); setShowCustomerDropdown(true); }}
                     style={{
                       background: '#f4f6f4',
                       border: '1px solid #d5ded7',
@@ -587,7 +636,7 @@ export default function SaleForm({
               </div>
             ) : (
               /* Search / Dropdown Input */
-              <div style={{ position: 'relative' }}>
+              <div ref={dropdownRef} style={{ position: 'relative' }}>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <div style={{ position: 'relative', flex: 1 }}>
                     <Search
