@@ -49,8 +49,16 @@ export default function SaleForm({
 
   // Live customers list state — initialized from catalog and sorted latest created first
   const [customerList, setCustomerList] = useState(() => {
-    return sortCustomersLatestFirst((catalog.customers || []).filter(c => c.is_active !== false));
+    return sortCustomersLatestFirst(catalog.customers || []);
   });
+
+  // Toggle for showing inactive customers
+  const [showInactive, setShowInactive] = useState(false);
+
+  // Inactive count
+  const inactiveCount = useMemo(() => {
+    return customerList.filter(c => c.is_active === false).length;
+  }, [customerList]);
 
   // Re-sync if catalog updates in background without discarding session-created customers
   useEffect(() => {
@@ -59,7 +67,7 @@ export default function SaleForm({
         const newlyCreated = prev.filter(c => c._isNewlyCreated);
         const serverIds = new Set((catalog.customers || []).map(c => c.id));
         const retained = newlyCreated.filter(n => !serverIds.has(n.id));
-        return sortCustomersLatestFirst([...retained, ...(catalog.customers || []).filter(c => c.is_active !== false)]);
+        return sortCustomersLatestFirst([...retained, ...(catalog.customers || [])]);
       });
     }
   }, [catalog.customers]);
@@ -72,14 +80,12 @@ export default function SaleForm({
         let { data, error } = await supabase
           .from('customers')
           .select('*')
-          .eq('is_active', true)
           .order('created_at', { ascending: false });
 
         if (error && error.message && error.message.includes('created_at')) {
           const res = await supabase
             .from('customers')
-            .select('*')
-            .eq('is_active', true);
+            .select('*');
           data = res.data;
           error = res.error;
         }
@@ -136,6 +142,13 @@ export default function SaleForm({
   const [editCustomerPhone, setEditCustomerPhone] = useState('');
   const [editCustomerLocation, setEditCustomerLocation] = useState('');
 
+  // Delete / Deactivate Customer State
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteChecking, setDeleteChecking] = useState(false);
+  const [deleteSalesCount, setDeleteSalesCount] = useState(0);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
   // Sale Items
   const [items, setItems] = useState(() => {
     if (initial.items && initial.items.length > 0) return initial.items;
@@ -162,9 +175,10 @@ export default function SaleForm({
     return customerList.find(c => c.id === selectedCustomerId) || null;
   }, [customerList, selectedCustomerId]);
 
-  // Filtered customers for search (always latest created first)
+  // Filtered customers for search (always latest created first; hide inactive unless toggled)
   const filteredCustomers = useMemo(() => {
-    const sorted = sortCustomersLatestFirst(customerList);
+    const listToFilter = showInactive ? customerList : customerList.filter(c => c.is_active !== false);
+    const sorted = sortCustomersLatestFirst(listToFilter);
     const q = customerSearch.trim().toLowerCase();
     if (!q) return sorted;
     return sorted.filter(c => {
@@ -173,7 +187,7 @@ export default function SaleForm({
       const loc = (c.location || c.place || c.address || '').toLowerCase();
       return name.includes(q) || phone.includes(q) || loc.includes(q);
     });
-  }, [customerList, customerSearch]);
+  }, [customerList, customerSearch, showInactive]);
 
   // Check for duplicate phone when creating new customer
   const duplicatePhoneCustomer = useMemo(() => {
@@ -436,6 +450,146 @@ export default function SaleForm({
     }
   }
 
+  // ── DELETE & DEACTIVATE CUSTOMER HANDLERS ─────────────────────────────────
+  async function handlePromptDelete(customer) {
+    if (!customer) return;
+    setDeleteTarget(customer);
+    setDeleteChecking(true);
+    setDeleteSalesCount(0);
+    setDeleteError('');
+    setDeleteBusy(false);
+
+    try {
+      let salesCount = 0;
+      // 1. Check sales_history
+      const { count: hCount, error: hErr } = await supabase
+        .from('sales_history')
+        .select('id', { count: 'exact', head: true })
+        .eq('customer_id', customer.id);
+
+      if (!hErr && typeof hCount === 'number') {
+        salesCount = hCount;
+      }
+
+      // 2. Also check sales table directly if sales_history returned 0 or errored
+      if (salesCount === 0) {
+        const { count: sCount, error: sErr } = await supabase
+          .from('sales')
+          .select('id', { count: 'exact', head: true })
+          .eq('customer_id', customer.id);
+        if (!sErr && typeof sCount === 'number') {
+          salesCount = sCount;
+        }
+      }
+
+      setDeleteSalesCount(salesCount);
+    } catch (e) {
+      console.error('Error checking sales count:', e);
+    } finally {
+      setDeleteChecking(false);
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    setDeleteError('');
+
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .delete()
+        .eq('id', deleteTarget.id);
+
+      if (error) {
+        if (error.code === '23503' || (error.message && error.message.includes('foreign key'))) {
+          setDeleteSalesCount(1);
+          setDeleteError('This customer has existing transactions or receipts and cannot be deleted. Deactivate them instead.');
+          return;
+        }
+        throw error;
+      }
+
+      // Permanent delete succeeded
+      const targetId = deleteTarget.id;
+      setCustomerList(prev => prev.filter(c => c.id !== targetId));
+      if (catalog?.customers) {
+        catalog.customers = catalog.customers.filter(c => c.id !== targetId);
+      }
+      if (selectedCustomerId === targetId) {
+        setSelectedCustomerId('');
+      }
+      if (onCustomerUpdate) {
+        onCustomerUpdate({ id: targetId, _deleted: true });
+      }
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error('Customer delete error:', err);
+      setDeleteError(err.message || 'Unable to delete customer. If foreign key constraint blocks deletion, you can deactivate them.');
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  async function handleConfirmDeactivate() {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    setDeleteError('');
+
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .update({ is_active: false })
+        .eq('id', deleteTarget.id);
+
+      if (error) throw error;
+
+      // Deactivation succeeded
+      const targetId = deleteTarget.id;
+      setCustomerList(prev => prev.map(c => c.id === targetId ? { ...c, is_active: false } : c));
+      if (catalog?.customers) {
+        catalog.customers = catalog.customers.map(c => c.id === targetId ? { ...c, is_active: false } : c);
+      }
+      if (selectedCustomerId === targetId) {
+        setSelectedCustomerId('');
+      }
+      if (onCustomerUpdate) {
+        onCustomerUpdate({ ...deleteTarget, is_active: false });
+      }
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error('Customer deactivate error:', err);
+      setDeleteError(err.message || 'Unable to deactivate customer.');
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  async function handleReactivateCustomer(customer) {
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .update({ is_active: true })
+        .eq('id', customer.id);
+
+      if (error) throw error;
+
+      // Reactivation succeeded
+      setCustomerList(prev => prev.map(c => c.id === customer.id ? { ...c, is_active: true } : c));
+      if (catalog?.customers) {
+        catalog.customers = catalog.customers.map(c => c.id === customer.id ? { ...c, is_active: true } : c);
+      }
+      if (onCustomerUpdate) {
+        onCustomerUpdate({ ...customer, is_active: true });
+      }
+      setSelectedCustomerId(customer.id);
+      setShowCustomerDropdown(false);
+    } catch (err) {
+      console.error('Customer reactivate error:', err);
+      alert('Unable to reactivate customer: ' + (err.message || 'Error'));
+    }
+  }
+
   // Form submission verification
   function handleReview(e) {
     e.preventDefault();
@@ -666,7 +820,7 @@ export default function SaleForm({
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     onClick={handleOpenEditCustomer}
@@ -686,6 +840,26 @@ export default function SaleForm({
                     title="Edit customer details"
                   >
                     <Edit3 size={14} /> Edit Customer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePromptDelete(selectedCustomer)}
+                    style={{
+                      background: '#fff0f0',
+                      border: '1px solid #ffd4d4',
+                      color: '#c92a2a',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      cursor: 'pointer'
+                    }}
+                    title="Delete customer"
+                  >
+                    <Trash2 size={14} /> Delete Customer
                   </button>
                   <button
                     type="button"
@@ -764,10 +938,31 @@ export default function SaleForm({
                       overflowY: 'auto'
                     }}
                   >
-                    <div style={{ padding: '8px', borderBottom: '1px solid #edf2ee', background: '#f8faf8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#5a7263' }}>
-                        {filteredCustomers.length} customer(s) found
-                      </span>
+                    <div style={{ padding: '8px 12px', borderBottom: '1px solid #edf2ee', background: '#f8faf8', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 600, color: '#5a7263' }}>
+                          {filteredCustomers.length} customer(s) found
+                        </span>
+                        {inactiveCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowInactive(v => !v)}
+                            style={{
+                              background: showInactive ? '#edf5ef' : '#f0f3f1',
+                              border: '1px solid',
+                              borderColor: showInactive ? '#a3cca8' : '#d5ddd7',
+                              borderRadius: '6px',
+                              padding: '2px 8px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              color: showInactive ? '#1a6640' : '#576f5f',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {showInactive ? 'Hide Inactive' : `Show Inactive (${inactiveCount})`}
+                          </button>
+                        )}
+                      </div>
                       <button
                         type="button"
                         onClick={handleOpenNewCustomer}
@@ -789,33 +984,95 @@ export default function SaleForm({
                     ) : (
                       filteredCustomers.map(c => {
                         const loc = c.location || c.place || c.address;
+                        const isInactive = c.is_active === false;
                         return (
                           <div
                             key={c.id}
                             onClick={() => {
+                              if (isInactive) return;
                               setSelectedCustomerId(c.id);
                               setShowCustomerDropdown(false);
                             }}
                             style={{
                               padding: '12px 14px',
                               borderBottom: '1px solid #f0f4f1',
-                              cursor: 'pointer',
+                              cursor: isInactive ? 'default' : 'pointer',
                               display: 'flex',
                               justifyContent: 'space-between',
                               alignItems: 'center',
+                              background: isInactive ? '#fbfbfb' : '#ffffff',
                               transition: 'background 0.15s'
                             }}
-                            onMouseEnter={e => e.currentTarget.style.background = '#f2f8f4'}
-                            onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}
+                            onMouseEnter={e => { if (!isInactive) e.currentTarget.style.background = '#f2f8f4'; }}
+                            onMouseLeave={e => { if (!isInactive) e.currentTarget.style.background = isInactive ? '#fbfbfb' : '#ffffff'; }}
                           >
                             <div>
-                              <strong style={{ fontSize: '15px', color: '#132e1e' }}>{c.name}</strong>
-                              <div style={{ display: 'flex', gap: '10px', marginTop: '2px', fontSize: '13px', color: '#567160' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <strong style={{ fontSize: '15px', color: isInactive ? '#738679' : '#132e1e' }}>{c.name}</strong>
+                                {isInactive && (
+                                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#875100', background: '#fff9eb', border: '1px solid #f9dfa2', padding: '1px 6px', borderRadius: '4px' }}>
+                                    Inactive
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', gap: '10px', marginTop: '2px', fontSize: '13px', color: isInactive ? '#8c9c91' : '#567160' }}>
                                 {c.phone && <span>📞 {c.phone}</span>}
-                                {loc && <span style={{ color: '#1a6640', fontWeight: 600 }}>📍 {loc}</span>}
+                                {loc && <span style={{ color: isInactive ? '#668070' : '#1a6640', fontWeight: 600 }}>📍 {loc}</span>}
                               </div>
                             </div>
-                            <span style={{ fontSize: '13px', color: '#1a6640', fontWeight: 600 }}>Select →</span>
+                            
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {isInactive ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleReactivateCustomer(c);
+                                  }}
+                                  style={{
+                                    background: '#eaf4ee',
+                                    border: '1px solid #b8dabf',
+                                    color: '#1a6640',
+                                    borderRadius: '6px',
+                                    padding: '4px 10px',
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                    cursor: 'pointer'
+                                  }}
+                                  title="Reactivate this customer"
+                                >
+                                  Reactivate
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handlePromptDelete(c);
+                                    }}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#93a699',
+                                      cursor: 'pointer',
+                                      padding: '6px',
+                                      borderRadius: '6px',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      transition: 'all 0.15s'
+                                    }}
+                                    onMouseEnter={e => { e.currentTarget.style.color = '#c92a2a'; e.currentTarget.style.background = '#ffebeb'; }}
+                                    onMouseLeave={e => { e.currentTarget.style.color = '#93a699'; e.currentTarget.style.background = 'none'; }}
+                                    title={`Delete ${c.name}`}
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                  <span style={{ fontSize: '13px', color: '#1a6640', fontWeight: 600 }}>Select →</span>
+                                </>
+                              )}
+                            </div>
                           </div>
                         );
                       })
@@ -1111,6 +1368,80 @@ export default function SaleForm({
               </Button>
             </div>
           </form>
+        </Dialog>
+      )}
+
+      {/* ── DELETE / DEACTIVATE CUSTOMER CONFIRMATION MODAL ────────────────── */}
+      {deleteTarget && (
+        <Dialog title="Delete Customer" onClose={deleteBusy ? () => {} : () => setDeleteTarget(null)}>
+          {deleteChecking ? (
+            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#526e5a' }}>
+              <p style={{ margin: 0, fontSize: '15px' }}>Checking sales history for this customer…</p>
+            </div>
+          ) : deleteSalesCount > 0 ? (
+            <div>
+              <div className="notice" style={{ background: '#fff9eb', borderColor: '#f9dfa2', color: '#875100' }}>
+                <strong>⚠️ Existing Sales Found ({deleteSalesCount} sale{deleteSalesCount > 1 ? 's' : ''})</strong>
+                <p style={{ margin: '4px 0 0', fontSize: '13px' }}>
+                  This customer has existing sales records and cannot be deleted. Deactivating this customer will preserve all previous sales records while hiding them from future sale searches.
+                </p>
+              </div>
+
+              <div style={{ background: '#f8faf8', border: '1px solid #dce8de', borderRadius: '10px', padding: '14px', margin: '14px 0' }}>
+                <strong style={{ fontSize: '16px', color: '#132e1e' }}>{deleteTarget.name}</strong>
+                <div style={{ fontSize: '13px', color: '#556e5d', marginTop: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  {deleteTarget.phone && <span>📞 {deleteTarget.phone}</span>}
+                  {(deleteTarget.location || deleteTarget.place || deleteTarget.address) && (
+                    <span style={{ color: '#1a6640', fontWeight: 600 }}>📍 {deleteTarget.location || deleteTarget.place || deleteTarget.address}</span>
+                  )}
+                </div>
+              </div>
+
+              {deleteError && <p className="auth-error" role="alert">{deleteError}</p>}
+
+              <div className="dialog-actions">
+                <Button type="button" variant="secondary" disabled={deleteBusy} onClick={() => setDeleteTarget(null)}>
+                  Cancel
+                </Button>
+                <Button type="button" disabled={deleteBusy} onClick={handleConfirmDeactivate}>
+                  {deleteBusy ? 'Deactivating…' : 'Deactivate Customer'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="notice" style={{ background: '#fff0f0', borderColor: '#ffd4d4', color: '#c92a2a' }}>
+                <strong>🗑️ Confirm Customer Deletion</strong>
+                <p style={{ margin: '4px 0 0', fontSize: '13px' }}>
+                  Are you sure you want to delete this customer? This action cannot be undone.
+                </p>
+              </div>
+
+              <div style={{ background: '#f8faf8', border: '1px solid #dce8de', borderRadius: '10px', padding: '14px', margin: '14px 0' }}>
+                <strong style={{ fontSize: '16px', color: '#132e1e' }}>{deleteTarget.name}</strong>
+                <div style={{ fontSize: '13px', color: '#556e5d', marginTop: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  {deleteTarget.phone && <span>📞 {deleteTarget.phone}</span>}
+                  {(deleteTarget.location || deleteTarget.place || deleteTarget.address) && (
+                    <span style={{ color: '#1a6640', fontWeight: 600 }}>📍 {deleteTarget.location || deleteTarget.place || deleteTarget.address}</span>
+                  )}
+                </div>
+                <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#2e6945', fontWeight: 600 }}>
+                  ✓ Verified: This customer has no sales history and can be permanently deleted.
+                </p>
+              </div>
+
+              {deleteError && <p className="auth-error" role="alert">{deleteError}</p>}
+
+              <div className="dialog-actions">
+                <Button type="button" variant="secondary" disabled={deleteBusy} onClick={() => setDeleteTarget(null)}>
+                  Cancel
+                </Button>
+                <Button type="button" className="delete-action" disabled={deleteBusy} onClick={handleConfirmDelete}>
+                  {deleteBusy ? 'Deleting…' : 'Delete Customer'}
+                </Button>
+              </div>
+            </div>
+          )}
         </Dialog>
       )}
     </>
