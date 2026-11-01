@@ -14,6 +14,7 @@ export const STANDARD_RAW_MATERIALS = [
 export const RAW_MATERIAL_UNITS = [
   { value: 'ton', label: 'Ton(s)' },
   { value: 'bag', label: 'Bag(s)' },
+  { value: 'nos', label: 'Number(s) (Nos)' },
   { value: 'litre', label: 'Litre(s)' },
   { value: 'load', label: 'Load(s)' },
   { value: 'kg', label: 'Kilogram(s) (kg)' },
@@ -561,10 +562,10 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
           <Field
             label={`Quantity (${materialUnit.toUpperCase()})`}
             type="number"
-            min={['bag', 'load', 'unit', 'trip'].includes(materialUnit) ? '1' : '0.001'}
+            min={['bag', 'load', 'unit', 'trip', 'nos', 'number'].includes(materialUnit) ? '1' : '0.001'}
             max="1000000000"
-            step={['bag', 'load', 'unit', 'trip'].includes(materialUnit) ? '1' : 'any'}
-            placeholder={['bag', 'load', 'unit', 'trip'].includes(materialUnit) ? 'e.g. 50' : 'e.g. 15.5'}
+            step={['bag', 'load', 'unit', 'trip', 'nos', 'number'].includes(materialUnit) ? '1' : 'any'}
+            placeholder={['bag', 'load', 'unit', 'trip', 'nos', 'number'].includes(materialUnit) ? 'e.g. 50' : 'e.g. 15.5'}
             required
             value={quantity}
             onChange={e => setQuantity(e.target.value)}
