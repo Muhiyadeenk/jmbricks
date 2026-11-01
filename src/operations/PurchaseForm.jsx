@@ -3,24 +3,37 @@ import { Package, Plus, UserPlus, CheckCircle2, Clock, AlertCircle } from 'lucid
 import { Button, Field, Dialog, Badge } from '../components';
 import { today, currency, execute } from './api';
 
+// Convert user-facing unit to PostgreSQL products_unit_check valid unit ('brick','bag','tonne','kg','litre','piece')
+export function toDbUnit(u) {
+  if (u === 'nos' || u === 'number' || u === 'piece') return 'piece';
+  if (u === 'ton' || u === 'tonne' || u === 'load' || u === 'trip' || u === 'cft' || u === 'unit') return 'tonne';
+  if (u === 'kg') return 'kg';
+  if (u === 'litre') return 'litre';
+  if (u === 'bag') return 'bag';
+  return 'piece';
+}
+
+// Convert PostgreSQL DB unit to human-readable friendly label
+export function formatUnit(u) {
+  if (u === 'piece') return 'nos';
+  if (u === 'tonne') return 'ton';
+  return u || '';
+}
+
 // Standard raw materials used in JM Hollo Bricks manufacturing (in strict default display order)
 export const STANDARD_RAW_MATERIALS = [
-  { name: 'Baby Metal', code: 'RM-BABYMETAL', unit: 'ton' },
-  { name: 'Dust', code: 'RM-DUST', unit: 'ton' },
+  { name: 'Baby Metal', code: 'RM-BABYMETAL', unit: 'tonne' },
+  { name: 'Dust', code: 'RM-DUST', unit: 'tonne' },
   { name: 'Cement', code: 'RM-CEMENT', unit: 'bag' },
   { name: 'Chemical', code: 'RM-CHEMICAL', unit: 'litre' },
 ];
 
 export const RAW_MATERIAL_UNITS = [
-  { value: 'ton', label: 'Ton(s)' },
+  { value: 'tonne', label: 'Ton(s)' },
   { value: 'bag', label: 'Bag(s)' },
-  { value: 'nos', label: 'Number(s) (Nos)' },
+  { value: 'piece', label: 'Number(s) (Nos)' },
   { value: 'litre', label: 'Litre(s)' },
-  { value: 'load', label: 'Load(s)' },
   { value: 'kg', label: 'Kilogram(s) (kg)' },
-  { value: 'unit', label: 'Unit(s)' },
-  { value: 'trip', label: 'Trip(s)' },
-  { value: 'cft', label: 'Cubic Feet (CFT)' },
 ];
 
 const paymentMethods = [
@@ -71,7 +84,7 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
           code: existing.code || std.code,
           unit: u,
           stock: avail,
-          label: `${std.name} (In stock: ${avail} ${u})`,
+          label: `${std.name} (In stock: ${avail} ${formatUnit(u)})`,
         };
       }
 
@@ -83,7 +96,7 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
         code: std.code,
         unit: std.unit,
         stock: 0,
-        label: `${std.name} (In stock: 0 ${std.unit})`,
+        label: `${std.name} (In stock: 0 ${formatUnit(std.unit)})`,
       };
     });
 
@@ -91,7 +104,7 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
     existingRawMaterials.forEach(p => {
       if (!matchedExistingIds.has(p.id)) {
         const avail = p.available_quantity != null ? p.available_quantity : 0;
-        const u = p.unit || 'ton';
+        const u = p.unit || 'tonne';
         list.push({
           type: 'existing',
           id: p.id,
@@ -99,7 +112,7 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
           code: p.code,
           unit: u,
           stock: avail,
-          label: `${p.name} (In stock: ${avail} ${u})`,
+          label: `${p.name} (In stock: ${avail} ${formatUnit(u)})`,
         });
       }
     });
@@ -110,7 +123,7 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
       id: '__custom__',
       name: '',
       code: '',
-      unit: 'ton',
+      unit: 'tonne',
       stock: 0,
       label: '➕ Add other raw material...',
     });
@@ -336,7 +349,7 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
               name: review.materialName,
               code: rawCode,
               kind: 'raw_material',
-              unit: review.unit,
+              unit: toDbUnit(review.unit),
               is_stocked: true,
               is_active: true,
               length_mm: null,
@@ -388,7 +401,7 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
         <div className="notice" style={{ background: '#eaf4ee', borderColor: '#b8dabf', color: '#164a2c' }}>
           <strong>📦 Raw Material Stock Update</strong>
           <p style={{ margin: '4px 0 0', fontSize: '13px' }}>
-            Saving this purchase will automatically add <strong>{review.quantity} {review.unit}</strong> to your <strong>{review.materialName}</strong> stock and record the supplier transaction.
+            Saving this purchase will automatically add <strong>{review.quantity} {formatUnit(review.unit)}</strong> to your <strong>{review.materialName}</strong> stock and record the supplier transaction.
           </p>
         </div>
 
@@ -403,9 +416,9 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
           <dd style={{ fontWeight: 700, color: '#1a6640' }}>{review.materialName}</dd>
 
           <dt>Quantity</dt>
-          <dd>{review.quantity} {review.unit}</dd>
+          <dd>{review.quantity} {formatUnit(review.unit)}</dd>
 
-          <dt>Rate per {review.unit}</dt>
+          <dt>Rate per {formatUnit(review.unit)}</dt>
           <dd>{currency(review.rate, settings.currency)}</dd>
 
           <dt>Total Amount</dt>
@@ -560,19 +573,19 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
         {/* 3. Quantity & Rate per Unit */}
         <div className="form-grid">
           <Field
-            label={`Quantity (${materialUnit.toUpperCase()})`}
+            label={`Quantity (${formatUnit(materialUnit).toUpperCase()})`}
             type="number"
-            min={['bag', 'load', 'unit', 'trip', 'nos', 'number'].includes(materialUnit) ? '1' : '0.001'}
+            min={['bag', 'piece', 'nos', 'number'].includes(materialUnit) ? '1' : '0.001'}
             max="1000000000"
-            step={['bag', 'load', 'unit', 'trip', 'nos', 'number'].includes(materialUnit) ? '1' : 'any'}
-            placeholder={['bag', 'load', 'unit', 'trip', 'nos', 'number'].includes(materialUnit) ? 'e.g. 50' : 'e.g. 15.5'}
+            step={['bag', 'piece', 'nos', 'number'].includes(materialUnit) ? '1' : 'any'}
+            placeholder={['bag', 'piece', 'nos', 'number'].includes(materialUnit) ? 'e.g. 50' : 'e.g. 15.5'}
             required
             value={quantity}
             onChange={e => setQuantity(e.target.value)}
           />
 
           <Field
-            label={`Rate per ${materialUnit} (₹)`}
+            label={`Rate per ${formatUnit(materialUnit)} (₹)`}
             type="number"
             min="0"
             max="1000000000"
@@ -605,7 +618,7 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
           </div>
           <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#526e5a' }}>
             {qtyNumber > 0 && rateNumber >= 0
-              ? `${qtyNumber} ${materialUnit} × ${currency(rateNumber, settings.currency)} = ${currency(totalAmount, settings.currency)}`
+              ? `${qtyNumber} ${formatUnit(materialUnit)} × ${currency(rateNumber, settings.currency)} = ${currency(totalAmount, settings.currency)}`
               : 'Enter quantity and rate to calculate total'}
           </p>
         </div>
