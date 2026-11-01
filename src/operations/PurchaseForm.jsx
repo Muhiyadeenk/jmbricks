@@ -3,24 +3,22 @@ import { Package, Plus, UserPlus, CheckCircle2, Clock, AlertCircle } from 'lucid
 import { Button, Field, Dialog, Badge } from '../components';
 import { today, currency, execute } from './api';
 
-// Standard raw materials used in concrete/hollow brick manufacturing
+// Standard raw materials used in JM Hollo Bricks manufacturing (in strict default display order)
 export const STANDARD_RAW_MATERIALS = [
+  { name: 'Baby Metal', code: 'RM-BABYMETAL', unit: 'ton' },
+  { name: 'Dust', code: 'RM-DUST', unit: 'ton' },
   { name: 'Cement', code: 'RM-CEMENT', unit: 'bag' },
-  { name: 'M-Sand', code: 'RM-MSAND', unit: 'ton' },
-  { name: 'P-Sand', code: 'RM-PSAND', unit: 'ton' },
-  { name: 'Quarry Dust', code: 'RM-QDUST', unit: 'ton' },
-  { name: 'Gravel (6mm / 12mm)', code: 'RM-GRAVEL', unit: 'ton' },
-  { name: 'Fly Ash', code: 'RM-FLYASH', unit: 'ton' },
-  { name: 'Chemical Admixture', code: 'RM-ADMIX', unit: 'litre' },
+  { name: 'Chemical', code: 'RM-CHEMICAL', unit: 'litre' },
 ];
 
 export const RAW_MATERIAL_UNITS = [
-  { value: 'bag', label: 'Bag(s)' },
   { value: 'ton', label: 'Ton(s)' },
+  { value: 'bag', label: 'Bag(s)' },
+  { value: 'litre', label: 'Litre(s)' },
   { value: 'load', label: 'Load(s)' },
+  { value: 'kg', label: 'Kilogram(s) (kg)' },
   { value: 'unit', label: 'Unit(s)' },
   { value: 'trip', label: 'Trip(s)' },
-  { value: 'kg', label: 'Kilogram(s) (kg)' },
   { value: 'cft', label: 'Cubic Feet (CFT)' },
 ];
 
@@ -38,35 +36,84 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
     return (catalog.products || []).filter(p => p.is_active && p.kind === 'raw_material');
   }, [catalog.products]);
 
-  // Combined selection list
+  // Combined selection list — ALWAYS displays in strict required order:
+  // 1. Baby Metal
+  // 2. Dust
+  // 3. Cement
+  // 4. Chemical
+  // followed by other active yard materials, then custom
   const materialChoices = useMemo(() => {
-    const list = existingRawMaterials.map(p => ({
-      type: 'existing',
-      id: p.id,
-      name: p.name,
-      code: p.code,
-      unit: p.unit || 'ton',
-      label: `${p.name} (In stock: ${p.available_quantity || 0} ${p.unit})`,
-    }));
+    const matchedExistingIds = new Set();
 
-    // Add standard materials if not already present in catalog
-    STANDARD_RAW_MATERIALS.forEach(std => {
-      const already = existingRawMaterials.some(
-        p => p.name.toLowerCase() === std.name.toLowerCase() || p.code === std.code
-      );
-      if (!already) {
+    // 1. First: the 4 mandatory standard raw materials in exact order
+    const list = STANDARD_RAW_MATERIALS.map(std => {
+      // Find matching product in database catalog (by exact name, code, or common alias)
+      const existing = existingRawMaterials.find(p => {
+        const pName = (p.name || '').trim().toLowerCase();
+        const stdName = std.name.trim().toLowerCase();
+        return (
+          pName === stdName ||
+          p.code === std.code ||
+          (stdName === 'dust' && (pName === 'dust' || pName === 'quarry dust')) ||
+          (stdName === 'chemical' && (pName === 'chemical' || pName === 'chemical admixture'))
+        );
+      });
+
+      if (existing) {
+        matchedExistingIds.add(existing.id);
+        const avail = existing.available_quantity != null ? existing.available_quantity : 0;
+        const u = existing.unit || std.unit;
+        return {
+          type: 'existing',
+          id: existing.id,
+          name: std.name, // Keep clean standard display name
+          code: existing.code || std.code,
+          unit: u,
+          stock: avail,
+          label: `${std.name} (In stock: ${avail} ${u})`,
+        };
+      }
+
+      // Not yet created in products table — display actual stock 0
+      return {
+        type: 'standard',
+        id: `std-${std.code}`,
+        name: std.name,
+        code: std.code,
+        unit: std.unit,
+        stock: 0,
+        label: `${std.name} (In stock: 0 ${std.unit})`,
+      };
+    });
+
+    // 2. Other existing raw materials in catalog
+    existingRawMaterials.forEach(p => {
+      if (!matchedExistingIds.has(p.id)) {
+        const avail = p.available_quantity != null ? p.available_quantity : 0;
+        const u = p.unit || 'ton';
         list.push({
-          type: 'standard',
-          id: `std-${std.code}`,
-          name: std.name,
-          code: std.code,
-          unit: std.unit,
-          label: `${std.name} (${std.unit})`,
+          type: 'existing',
+          id: p.id,
+          name: p.name,
+          code: p.code,
+          unit: u,
+          stock: avail,
+          label: `${p.name} (In stock: ${avail} ${u})`,
         });
       }
     });
 
-    list.push({ type: 'custom', id: '__custom__', name: '', code: '', unit: 'ton', label: '➕ Add other raw material...' });
+    // 3. Option to add any custom raw material
+    list.push({
+      type: 'custom',
+      id: '__custom__',
+      name: '',
+      code: '',
+      unit: 'ton',
+      stock: 0,
+      label: '➕ Add other raw material...',
+    });
+
     return list;
   }, [existingRawMaterials]);
 
@@ -77,7 +124,7 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
   const [newSupplierName, setNewSupplierName] = useState('');
   const [newSupplierPhone, setNewSupplierPhone] = useState('');
 
-  // Material selection
+  // Material selection: default to first in list (Baby Metal)
   const [selectedChoiceId, setSelectedChoiceId] = useState(() => {
     if (initial.items?.[0]?.product_id) {
       return initial.items[0].product_id;
@@ -87,7 +134,7 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
   const [customMaterialName, setCustomMaterialName] = useState('');
   const [materialUnit, setMaterialUnit] = useState(() => {
     const first = materialChoices[0];
-    return first?.unit || 'bag';
+    return first?.unit || 'ton';
   });
 
   // Quantity and Rate

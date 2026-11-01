@@ -90,7 +90,7 @@ function StockPage({catalog,settings,owner,open,onHistory}){
          <input aria-label="Search products" placeholder="Search product name, code or raw material…" value={search} onChange={e=>setSearch(e.target.value)}/>
        </div>
        <select aria-label="Filter products" value={filter} onChange={e=>setFilter(e.target.value)}>
-         {[['all','All inventory'],... [4,5,6,8].map(s=>[String(s),`${s}-inch bricks`]),['finished_brick','Finished bricks only'],['raw_material','Raw materials only (Cement, Sand, Dust)'],['Low Stock','Low Stock'],['Out of Stock','Out of Stock'],['inactive','Inactive']].map(([v,l])=><option key={v} value={v}>{l}</option>)}
+         {[['all','All inventory'],... [4,5,6,8].map(s=>[String(s),`${s}-inch bricks`]),['finished_brick','Finished bricks only'],['raw_material','Raw materials only (Baby Metal, Dust, Cement, Chemical)'],['Low Stock','Low Stock'],['Out of Stock','Out of Stock'],['inactive','Inactive']].map(([v,l])=><option key={v} value={v}>{l}</option>)}
        </select>
      </div>
      <div className="stock-layout">
