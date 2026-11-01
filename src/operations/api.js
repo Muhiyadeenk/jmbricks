@@ -22,9 +22,20 @@ export async function allRows(table, configure=q=>q) {
 }
 export async function catalog() {
   const [products,customers,suppliers,categories]=await Promise.all([
-    allRows('production_inventory').then(rows=>rows.map(p=>({...p,brick_size:p.production_brick_size,default_quantity:p.production_default_quantity}))), allRows('customers',q=>q.eq('is_active',true)),
-    allRows('suppliers',q=>q.eq('is_active',true)), allRows('expense_categories',q=>q.eq('is_active',true)),
+    allRows('production_inventory').then(rows=>rows.map(p=>({...p,brick_size:p.production_brick_size,default_quantity:p.production_default_quantity}))),
+    allRows('customers',q=>q.eq('is_active',true)),
+    allRows('suppliers',q=>q.eq('is_active',true)),
+    allRows('expense_categories',q=>q.eq('is_active',true)),
   ]);
+  customers.sort((a,b)=>{
+    if(a.created_at && b.created_at){
+      const diff=new Date(b.created_at)-new Date(a.created_at);
+      if(!isNaN(diff)&&diff!==0) return diff;
+    }
+    if(a.created_at && !b.created_at) return -1;
+    if(!a.created_at && b.created_at) return 1;
+    return (a.name||'').localeCompare(b.name||'');
+  });
   return {products,customers,suppliers,categories};
 }
 export async function history(kind,filters,page=0) {

@@ -13,6 +13,25 @@ const paymentMethods = [
   ['other', 'Other']
 ];
 
+function sortCustomersLatestFirst(list) {
+  return [...list].sort((a, b) => {
+    // 1. Newly created in current session always at the very top
+    if (a._isNewlyCreated && !b._isNewlyCreated) return -1;
+    if (!a._isNewlyCreated && b._isNewlyCreated) return 1;
+
+    // 2. Sort by created_at DESC (latest first)
+    if (a.created_at && b.created_at) {
+      const diff = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      if (!isNaN(diff) && diff !== 0) return diff;
+    }
+    if (a.created_at && !b.created_at) return -1;
+    if (!a.created_at && b.created_at) return 1;
+
+    // 3. Fallback: alphabetical by name
+    return (a.name || '').localeCompare(b.name || '');
+  });
+}
+
 export default function SaleForm({
   initial = {},
   catalog,
@@ -28,32 +47,59 @@ export default function SaleForm({
     return (catalog.products || []).filter(p => p.is_active && p.kind === 'finished_brick');
   }, [catalog.products]);
 
-  // Live customers list state — initialized from catalog and updated immediately on new customer addition
+  // Live customers list state — initialized from catalog and sorted latest created first
   const [customerList, setCustomerList] = useState(() => {
-    return (catalog.customers || []).filter(c => c.is_active !== false);
+    return sortCustomersLatestFirst((catalog.customers || []).filter(c => c.is_active !== false));
   });
 
-  // Re-sync if catalog updates in background
+  // Re-sync if catalog updates in background without discarding session-created customers
   useEffect(() => {
     if (catalog.customers && catalog.customers.length > 0) {
-      setCustomerList(catalog.customers.filter(c => c.is_active !== false));
+      setCustomerList(prev => {
+        const newlyCreated = prev.filter(c => c._isNewlyCreated);
+        const serverIds = new Set((catalog.customers || []).map(c => c.id));
+        const retained = newlyCreated.filter(n => !serverIds.has(n.id));
+        return sortCustomersLatestFirst([...retained, ...(catalog.customers || []).filter(c => c.is_active !== false)]);
+      });
     }
   }, [catalog.customers]);
 
   // Also query directly on open to make sure any recently added customers are immediately present
   useEffect(() => {
     let alive = true;
-    supabase
-      .from('customers')
-      .select('*')
-      .eq('is_active', true)
-      .order('name')
-      .then(({ data, error }) => {
-        if (alive && data && !error) {
-          setCustomerList(data);
-          if (catalog) catalog.customers = data;
+    async function loadCustomers() {
+      try {
+        let { data, error } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
+
+        if (error && error.message && error.message.includes('created_at')) {
+          const res = await supabase
+            .from('customers')
+            .select('*')
+            .eq('is_active', true);
+          data = res.data;
+          error = res.error;
         }
-      });
+
+        if (alive && data && !error) {
+          setCustomerList(prev => {
+            const newlyCreated = prev.filter(c => c._isNewlyCreated);
+            const serverIds = new Set(data.map(c => c.id));
+            const retained = newlyCreated.filter(n => !serverIds.has(n.id));
+            return sortCustomersLatestFirst([...retained, ...data]);
+          });
+          if (catalog) {
+            catalog.customers = data;
+          }
+        }
+      } catch (err) {
+        // Silently preserve existing list
+      }
+    }
+    loadCustomers();
     return () => { alive = false; };
   }, []);
 
@@ -116,11 +162,12 @@ export default function SaleForm({
     return customerList.find(c => c.id === selectedCustomerId) || null;
   }, [customerList, selectedCustomerId]);
 
-  // Filtered customers for search
+  // Filtered customers for search (always latest created first)
   const filteredCustomers = useMemo(() => {
+    const sorted = sortCustomersLatestFirst(customerList);
     const q = customerSearch.trim().toLowerCase();
-    if (!q) return customerList;
-    return customerList.filter(c => {
+    if (!q) return sorted;
+    return sorted.filter(c => {
       const name = (c.name || '').toLowerCase();
       const phone = (c.phone || '').toLowerCase();
       const loc = (c.location || c.place || c.address || '').toLowerCase();
@@ -191,7 +238,11 @@ export default function SaleForm({
   // Save NEW customer to database
   async function handleSaveNewCustomer(e) {
     e.preventDefault();
-    if (!newCustomerName.trim()) {
+    const trimmedName = newCustomerName.trim();
+    const trimmedPhone = newCustomerPhone.trim();
+    const trimmedLocation = newCustomerLocation.trim();
+
+    if (!trimmedName) {
       setCustomerError('Customer name is required.');
       return;
     }
@@ -199,94 +250,117 @@ export default function SaleForm({
     setCustomerError('');
 
     const newId = crypto.randomUUID();
-    const customerPayload = {
+    const nowIso = new Date().toISOString();
+    const insertPayload = {
       id: newId,
-      name: newCustomerName.trim(),
-      phone: newCustomerPhone.trim(),
-      location: newCustomerLocation.trim(),
+      name: trimmedName,
+      phone: trimmedPhone,
+      location: trimmedLocation,
       is_active: true
     };
 
     try {
-      // 1. Insert into Supabase customers table
+      let savedRecord = null;
+
+      // 1. Insert into Supabase customers table and fetch the database row
       const { data, error } = await supabase
         .from('customers')
-        .insert(customerPayload)
+        .insert(insertPayload)
         .select()
         .single();
 
-      if (error) {
-        // If permission denied by RLS, seamlessly use RPC fallback on sale submission
-        if (error.code === '42501' || (error.message && error.message.includes('permission denied'))) {
-          const fallback = {
-            id: `pending-${newId}`,
-            name: newCustomerName.trim(),
-            phone: newCustomerPhone.trim(),
-            location: newCustomerLocation.trim(),
-            isPendingNew: true
-          };
-          completeCustomerSave(fallback);
-          return;
-        }
-
-        // If location column doesn't exist yet in PostgreSQL, try insert without location
-        if (error.message && error.message.includes('location')) {
-          const fallback = {
+      if (!error && data) {
+        savedRecord = {
+          ...data,
+          location: data.location || trimmedLocation,
+          created_at: data.created_at || nowIso,
+          _isNewlyCreated: true
+        };
+      } else {
+        // If error indicates location column issue in PostgreSQL
+        if (error?.message && error.message.includes('location')) {
+          const fallbackPayload = {
             id: newId,
-            name: newCustomerName.trim(),
-            phone: newCustomerPhone.trim(),
+            name: trimmedName,
+            phone: trimmedPhone,
             is_active: true
           };
-          const { data: fbData, error: fbErr } = await supabase.from('customers').insert(fallback).select().single();
-          if (fbErr) {
-            if (fbErr.code === '42501' || (fbErr.message && fbErr.message.includes('permission denied'))) {
-              completeCustomerSave({ ...fallback, id: `pending-${newId}`, location: newCustomerLocation.trim(), isPendingNew: true });
-              return;
-            }
-            throw fbErr;
+          const { data: fbData, error: fbErr } = await supabase
+            .from('customers')
+            .insert(fallbackPayload)
+            .select()
+            .single();
+
+          if (!fbErr && fbData) {
+            savedRecord = {
+              ...fbData,
+              location: trimmedLocation,
+              created_at: fbData.created_at || nowIso,
+              _isNewlyCreated: true
+            };
+          } else {
+            // Try insert without .select()
+            const { error: fbErr2 } = await supabase.from('customers').insert(fallbackPayload);
+            if (fbErr2) throw fbErr2;
+            savedRecord = {
+              ...fallbackPayload,
+              location: trimmedLocation,
+              created_at: nowIso,
+              _isNewlyCreated: true
+            };
           }
-          completeCustomerSave(fbData || fallback);
-          return;
+        } else {
+          // If .select() failed (e.g. RETURNING policy restricted), insert without .select()
+          const { error: plainErr } = await supabase.from('customers').insert(insertPayload);
+          if (plainErr) throw plainErr;
+          savedRecord = {
+            ...insertPayload,
+            created_at: nowIso,
+            _isNewlyCreated: true
+          };
         }
-        throw error;
       }
 
-      completeCustomerSave(data || customerPayload);
+      if (!savedRecord || !savedRecord.id) {
+        throw new Error('Customer could not be created in database.');
+      }
+
+      // Automatically update state, select new customer, and close modal
+      completeCustomerSave(savedRecord);
     } catch (err) {
-      // In case of any unhandled network error or permission issue, fallback gracefully to allow sale completion
-      const fallback = {
-        id: `pending-${newId}`,
-        name: newCustomerName.trim(),
-        phone: newCustomerPhone.trim(),
-        location: newCustomerLocation.trim(),
-        isPendingNew: true
-      };
-      completeCustomerSave(fallback);
+      console.error('Customer save error:', err);
+      setCustomerError(err.message || 'Unable to save customer to database.');
     } finally {
       setCustomerSaving(false);
     }
   }
 
   function completeCustomerSave(customerObj) {
-    // 1. Immediately prepend to customerList state so search and list see it instantly!
+    // 1. Immediately prepend customer to customerList state at the TOP of the list
     setCustomerList(prev => {
       const filtered = prev.filter(c => c.id !== customerObj.id);
-      return [customerObj, ...filtered];
+      return [{ ...customerObj, _isNewlyCreated: true }, ...filtered];
     });
 
-    // 2. Add to catalog.customers reference
+    // 2. Add to catalog.customers reference at the top
     if (catalog?.customers) {
       catalog.customers = [customerObj, ...catalog.customers.filter(c => c.id !== customerObj.id)];
     }
 
-    // 3. Immediately select this new customer
+    // 3. AUTOMATICALLY SELECT THE NEW CUSTOMER BY DATABASE ID!
     setSelectedCustomerId(customerObj.id);
-    setShowNewCustomerModal(false);
+
+    // 4. Reset search query and close dropdown
     setCustomerSearch('');
     setShowCustomerDropdown(false);
 
-    // 4. Trigger parent catalog refresh
-    if (onCustomerUpdate) onCustomerUpdate();
+    // 5. AUTOMATICALLY CLOSE the Add New Customer modal!
+    setShowNewCustomerModal(false);
+
+    // 6. Notify parent component to update its customer list
+    if (onCustomerUpdate) {
+      onCustomerUpdate(customerObj);
+    }
   }
 
   // Save EDITED customer to database
@@ -313,12 +387,10 @@ export default function SaleForm({
         .select()
         .single();
 
-      if (error) {
-        if (error.code === '42501' || (error.message && error.message.includes('permission denied'))) {
-          completeCustomerEdit({ ...selectedCustomer, ...updatePayload });
-          return;
-        }
-        if (error.message && error.message.includes('location')) {
+      if (!error && data) {
+        completeCustomerEdit({ ...selectedCustomer, ...data });
+      } else {
+        if (error?.message && error.message.includes('location')) {
           const fallback = {
             name: editCustomerName.trim(),
             phone: editCustomerPhone.trim()
@@ -329,19 +401,25 @@ export default function SaleForm({
             .eq('id', selectedCustomer.id)
             .select()
             .single();
-          if (fbErr) {
-            completeCustomerEdit({ ...selectedCustomer, ...updatePayload });
+
+          if (!fbErr && fbData) {
+            completeCustomerEdit({ ...selectedCustomer, ...fbData, location: editCustomerLocation.trim() });
             return;
           }
-          completeCustomerEdit(fbData || { ...selectedCustomer, ...fallback });
-          return;
         }
-        throw error;
-      }
 
-      completeCustomerEdit(data || { ...selectedCustomer, ...updatePayload });
+        // Try update without .select()
+        const { error: plainErr } = await supabase
+          .from('customers')
+          .update(updatePayload)
+          .eq('id', selectedCustomer.id);
+
+        if (plainErr) throw plainErr;
+        completeCustomerEdit({ ...selectedCustomer, ...updatePayload });
+      }
     } catch (err) {
-      completeCustomerEdit({ ...selectedCustomer, ...updatePayload });
+      console.error('Customer update error:', err);
+      setCustomerError(err.message || 'Unable to update customer.');
     } finally {
       setCustomerSaving(false);
     }
@@ -353,16 +431,9 @@ export default function SaleForm({
       catalog.customers = catalog.customers.map(c => c.id === updatedObj.id ? { ...c, ...updatedObj } : c);
     }
     setShowEditCustomerModal(false);
-    if (onCustomerUpdate) onCustomerUpdate();
-  }
-
-  function completeCustomerEdit(updatedObj) {
-    const idx = catalog.customers.findIndex(c => c.id === updatedObj.id);
-    if (idx !== -1) {
-      catalog.customers[idx] = { ...catalog.customers[idx], ...updatedObj };
+    if (onCustomerUpdate) {
+      onCustomerUpdate(updatedObj);
     }
-    setShowEditCustomerModal(false);
-    if (onCustomerUpdate) onCustomerUpdate();
   }
 
   // Form submission verification

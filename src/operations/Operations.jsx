@@ -20,7 +20,9 @@ export default function Operations({profile,settings}) {
   const lock=useRef(false);
   const canWrite=profile.role==='owner'||profile.role==='staff',owner=profile.role==='owner';
   useEffect(()=>{
-    let alive=true;setLoading(true);setError('');
+    let alive=true;
+    if(!catalog.products.length && !catalog.customers.length) setLoading(true);
+    setError('');
     loadCatalog().then(data=>{if(alive)setCatalog(data)}).catch(()=>{if(alive)setError('Could not load inventory and contacts. Check your connection and apply the database migrations and production register update.')}).finally(()=>{if(alive)setLoading(false)});
     return()=>{alive=false};
   },[revision]);
@@ -64,7 +66,7 @@ export default function Operations({profile,settings}) {
     {(page==='production'||productionNew)&&<Production catalog={catalog} settings={settings} profile={profile} revision={revision} onChanged={()=>setRevision(v=>v+1)} openNew={productionNew} onOpened={()=>setProductionNew(false)}/>}
     {formats[page]&&page!=='production'&&<HistoryPage key={page} kind={page} revision={revision} catalog={catalog} settings={settings} canWrite={canWrite} owner={owner} open={open} onDetail={id=>setSelected({kind:page,id})}/>}
     {page==='production'&&owner&&<Card><SectionTitle title="Product configuration" subtitle="Manage brick sizes and bricks per line. Product changes never add stock."/><Button onClick={()=>open('product')}>Configure a product</Button>{catalog.products.map(p=><div className="product-footer" key={p.id}><span>{p.code} · {p.name} · {p.default_quantity||'—'} bricks/line</span><Button variant="secondary" onClick={()=>open('product',p)}>Edit configuration</Button></div>)}<details><summary>Authorized stock corrections</summary><p>Verified opening balances and corrections require a reason and an owner account.</p>{catalog.products.filter(p=>p.is_stocked).map(p=><Button key={p.id} variant="secondary" onClick={()=>open('adjustment',{product_id:p.id})}>{p.code} · adjustment</Button>)}</details></Card>}{page==='reports'&&<Reports settings={settings} revision={revision} owner={owner}/>}
-    {modal&&!pending&&<OperationForm key={`${modal.kind}-${modal.initial.id||''}`} {...modal} catalog={catalog} settings={settings} busy={busy} error={saveError} onSubmit={submit} onClose={()=>setModal(null)} onCustomerUpdate={()=>setRevision(v=>v+1)}/>}
+    {modal&&!pending&&<OperationForm key={`${modal.kind}-${modal.initial.id||''}`} {...modal} catalog={catalog} settings={settings} busy={busy} error={saveError} onSubmit={submit} onClose={()=>setModal(null)} onCustomerUpdate={cust => { if(cust) setCatalog(prev=>({...prev, customers:[cust, ...prev.customers.filter(c=>c.id!==cust.id)]})); }}/>}
     {pending&&<Dialog title="Submission status" onClose={()=>{}}><p>{busy?'Saving your entry…':'This entry needs confirmation. Keep its request ID and retry the original submission if the connection was interrupted.'}</p><div className="notice">{titles[pending.kind]}<br/>Request: {pending.id}</div>{saveError&&<div className="auth-error" role="alert">{saveError}</div>}<div className="dialog-actions"><Button variant="secondary" disabled={busy} onClick={checkPending}>Check saved status</Button><Button disabled={busy} onClick={()=>send(pending)}>{busy?'Please wait…':'Retry original entry'}</Button></div></Dialog>}
     {selected&&!modal&&!pending&&<TransactionDetail key={`${selected.kind}-${selected.id}-${revision}`} {...selected} catalog={catalog} settings={settings} canWrite={canWrite} owner={owner} onClose={()=>setSelected(null)} onPayment={open}/>}
     {stockHistory&&!modal&&!pending&&<MovementHistory product={stockHistory} onClose={()=>setStockHistory(null)}/>}
