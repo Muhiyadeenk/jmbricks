@@ -263,17 +263,21 @@ function HistoryPage({kind,revision,catalog,settings,canWrite,owner,open,onDetai
 
  return (
    <>
-     <div className="toolbar">
-       <div className="search">
-         <Search size={18}/>
-         <input aria-label="Search records" placeholder={`Search ${kind==='sales'?'customers':kind==='purchases'?'suppliers':kind==='production'?'products':'descriptions'}…`} value={filters.search} onChange={e=>change('search',e.target.value)}/>
+     <div className="toolbar filter-toolbar">
+       <div className="filter-date-row">
+         <Field label="From Date" type="date" value={filters.from} onChange={e=>change('from',e.target.value)}/>
+         <Field label="To Date" type="date" min={filters.from} value={filters.to} onChange={e=>change('to',e.target.value)}/>
        </div>
-       <Field label="From" type="date" value={filters.from} onChange={e=>change('from',e.target.value)}/>
-       <Field label="To" type="date" min={filters.from} value={filters.to} onChange={e=>change('to',e.target.value)}/>
-       {kind==='expenses'&&<select aria-label="Expense category" value={filters.category} onChange={e=>change('category',e.target.value)}><option value="">All categories</option>{catalog.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
-       <select aria-label="Record status" value={filters.status} onChange={e=>change('status',e.target.value)}><option value="active">Active entries</option><option value="deleted">Deleted entries</option><option value="all">All entries</option></select>
-       {canWrite&&<Button onClick={()=>open(f.operation)}><Plus size={16}/>{titles[f.operation]}</Button>}
-       {kind==='expenses'&&owner&&<Button variant="secondary" onClick={()=>open('category')}>Add category</Button>}
+       <div className="filter-action-row">
+         <div className="search">
+           <Search size={18}/>
+           <input aria-label="Search records" placeholder={`Search ${kind==='sales'?'customers':kind==='purchases'?'suppliers':kind==='production'?'products':'descriptions'}…`} value={filters.search} onChange={e=>change('search',e.target.value)}/>
+         </div>
+         {kind==='expenses'&&<select aria-label="Expense category" value={filters.category} onChange={e=>change('category',e.target.value)}><option value="">All categories</option>{catalog.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
+         <select aria-label="Record status" value={filters.status} onChange={e=>change('status',e.target.value)}><option value="active">Active entries</option><option value="deleted">Deleted entries</option><option value="all">All entries</option></select>
+         {canWrite&&<Button onClick={()=>open(f.operation)}><Plus size={16}/>{titles[f.operation]}</Button>}
+         {kind==='expenses'&&owner&&<Button variant="secondary" onClick={()=>open('category')}>Add category</Button>}
+       </div>
      </div>
      <Card>
        <SectionTitle title={`${f.title} history`} subtitle={`${result.count} matching records · 25 per page`}/>

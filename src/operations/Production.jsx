@@ -199,30 +199,34 @@ export default function Production({ catalog, settings, profile, revision, onCha
       </div>
 
       {/* Toolbar */}
-      <div className="toolbar no-print">
-        <Field label="Reference search" value={filters.search} onChange={e => filter('search', e.target.value)} />
-        <Field label="From" type="date" value={filters.from} onChange={e => filter('from', e.target.value)} />
-        <Field label="To"   type="date" min={filters.from} value={filters.to} onChange={e => filter('to', e.target.value)} />
-        <select aria-label="Brick size filter" value={filters.size} onChange={e => filter('size', e.target.value)}>
-          <option value="">All sizes</option>
-          {[4, 5, 6, 8].map(s => <option key={s}>{s}</option>)}
-        </select>
-        <select aria-label="Status filter" value={filters.status} onChange={e => filter('status', e.target.value)}>
-          <option value="active">Active entries</option>
-          <option value="">All statuses</option>
-          {['draft', 'in_progress', 'completed', 'reversed'].map(s => (
-            <option key={s} value={s}>{s === 'reversed' ? 'Deleted / reversed' : s}</option>
-          ))}
-        </select>
-        {write && (
-          <Button onClick={() => setEdit({ id: crypto.randomUUID(), revision: 0, date: end, status: 'draft', notes: '', items: [newItem()] })}>
-            Add Production
+      <div className="toolbar filter-toolbar no-print">
+        <div className="filter-date-row">
+          <Field label="From Date" type="date" value={filters.from} onChange={e => filter('from', e.target.value)} />
+          <Field label="To Date"   type="date" min={filters.from} value={filters.to} onChange={e => filter('to', e.target.value)} />
+        </div>
+        <div className="filter-action-row">
+          <Field label="Reference search" value={filters.search} onChange={e => filter('search', e.target.value)} />
+          <select aria-label="Brick size filter" value={filters.size} onChange={e => filter('size', e.target.value)}>
+            <option value="">All sizes</option>
+            {[4, 5, 6, 8].map(s => <option key={s}>{s}</option>)}
+          </select>
+          <select aria-label="Status filter" value={filters.status} onChange={e => filter('status', e.target.value)}>
+            <option value="active">Active entries</option>
+            <option value="">All statuses</option>
+            {['draft', 'in_progress', 'completed', 'reversed'].map(s => (
+              <option key={s} value={s}>{s === 'reversed' ? 'Deleted / reversed' : s}</option>
+            ))}
+          </select>
+          {write && (
+            <Button onClick={() => setEdit({ id: crypto.randomUUID(), revision: 0, date: end, status: 'draft', notes: '', items: [newItem()] })}>
+              Add Production
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => downloadCsv('JM-Production.csv', columns.map(([key, label]) => ({ key, label })), matches.map(r => ({ ...r, production_date: displayDate(r.production_date) })))}>
+            Export CSV
           </Button>
-        )}
-        <Button variant="secondary" onClick={() => downloadCsv('JM-Production.csv', columns.map(([key, label]) => ({ key, label })), matches.map(r => ({ ...r, production_date: displayDate(r.production_date) })))}>
-          Export CSV
-        </Button>
-        <Button variant="secondary" onClick={() => window.print()}>Print</Button>
+          <Button variant="secondary" onClick={() => window.print()}>Print</Button>
+        </div>
       </div>
 
       {/* Register table */}

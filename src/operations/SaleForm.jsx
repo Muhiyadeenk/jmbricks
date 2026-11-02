@@ -741,8 +741,21 @@ export default function SaleForm({
     <>
       <Dialog title="New Sale" onClose={onClose}>
         <form onSubmit={handleReview}>
-          <div className="form-grid">
-            <Field label="Sale Date" type="date" max={today(settings.timezone)} value={date} onChange={e => setDate(e.target.value)} required />
+          <div className="sale-top-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', background: '#f5f9f6', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #dce8de' }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: '#1a6640', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              📄 SALES INVOICE ENTRY
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#4a6252' }}>Sale Date:</span>
+              <input
+                type="date"
+                max={today(settings.timezone)}
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                required
+                style={{ padding: '6px 10px', fontSize: '13.5px', minHeight: '36px', width: 'auto', borderRadius: '8px', border: '1.5px solid #c2d4c6' }}
+              />
+            </div>
           </div>
 
           {/* ── CUSTOMER MANAGEMENT SECTION ─────────────────────────────────── */}
@@ -1084,21 +1097,45 @@ export default function SaleForm({
           </div>
 
           {/* ── FINISHED BRICKS SELECTION ─────────────────────────────────────── */}
-          <div style={{ margin: '20px 0 10px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#132e1e', marginBottom: '10px' }}>
-              Brick Items
-            </h3>
+          <div style={{ margin: '18px 0 10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#132e1e', margin: 0 }}>
+                Brick Items & Quantities
+              </h3>
+              <span style={{ fontSize: '12px', color: '#567160', fontWeight: 600 }}>
+                {items.length} line(s) added
+              </span>
+            </div>
 
-            <div className="entry-items">
+            <div className="entry-items" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {items.map((item, idx) => {
                 const prod = availableBricks.find(b => b.id === item.product_id);
+                const lineTotal = (Number(item.quantity) || 0) * (Number(item.price) || 0);
                 return (
-                  <div className="entry-item" key={idx} style={{ padding: '14px', borderRadius: '12px', border: '1.5px solid #dce8de', background: '#fafdfa', marginBottom: '10px' }}>
-                    <Field label={`Brick Size (Line ${idx + 1})`}>
+                  <div className="entry-item" key={idx} style={{ padding: '14px', borderRadius: '12px', border: '1.5px solid #dce8de', background: '#fafdfa' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#254430' }}>
+                        Item #{idx + 1}
+                      </span>
+                      {items.length > 1 && (
+                        <button
+                          type="button"
+                          className="icon-button"
+                          aria-label="Remove item"
+                          onClick={() => removeItem(idx)}
+                          style={{ color: '#b42318', padding: '4px', background: '#fff0ed', borderRadius: '6px', border: '1px solid #ffd4cc' }}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </div>
+
+                    <Field label="Brick Size">
                       <select
                         value={item.product_id}
                         required
                         onChange={e => updateItem(idx, 'product_id', e.target.value)}
+                        style={{ minHeight: '40px', fontSize: '14px' }}
                       >
                         <option value="">Choose brick size</option>
                         {availableBricks.map(b => (
@@ -1109,7 +1146,7 @@ export default function SaleForm({
                       </select>
                     </Field>
 
-                    <div className="form-grid" style={{ marginTop: '10px' }}>
+                    <div className="form-grid" style={{ marginTop: '10px', gap: '12px' }}>
                       <Field
                         label="Quantity (Bricks)"
                         type="number"
@@ -1135,21 +1172,13 @@ export default function SaleForm({
                       />
                     </div>
 
-                    <div className="line-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
-                      <small style={{ color: '#4a6252', fontSize: '13px' }}>
-                        {prod ? `Yard available: ${prod.available_quantity || 0} bricks` : 'Select a brick size'}
+                    <div className="line-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', borderTop: '1px dashed #e2ede4', paddingTop: '8px' }}>
+                      <small style={{ color: '#4a6252', fontSize: '12.5px' }}>
+                        {prod ? `Yard stock: ${prod.available_quantity || 0} bricks` : 'Select a brick size'}
                       </small>
-                      {items.length > 1 && (
-                        <button
-                          type="button"
-                          className="icon-button"
-                          aria-label="Remove item"
-                          onClick={() => removeItem(idx)}
-                          style={{ color: '#b42318' }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
+                      <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1a6640' }}>
+                        Line total: {currency(lineTotal, settings.currency)}
+                      </div>
                     </div>
                   </div>
                 );
@@ -1161,63 +1190,108 @@ export default function SaleForm({
               variant="secondary"
               disabled={items.length >= 10}
               onClick={addItem}
-              style={{ minHeight: '44px', width: '100%', justifyContent: 'center', marginTop: '6px' }}
+              style={{ minHeight: '40px', width: '100%', justifyContent: 'center', marginTop: '8px', fontSize: '13.5px' }}
             >
-              <Plus size={16} /> Add Another Brick Size
+              <Plus size={15} /> Add Another Brick Size
             </Button>
           </div>
 
           {/* ── PAYMENT & TOTALS ────────────────────────────────────────────── */}
-          <div className="form-grid" style={{ marginTop: '16px' }}>
-            <Field
-              label="Discount (₹)"
-              type="number"
-              min="0"
-              step="0.01"
-              value={discount}
-              onChange={e => setDiscount(e.target.value)}
-            />
+          <div style={{ margin: '18px 0 10px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#132e1e', marginBottom: '10px' }}>
+              Payment Details
+            </h3>
 
-            <Field
-              label="Amount Received (₹)"
-              type="number"
-              min="0"
-              step="0.01"
-              value={amountPaid}
-              placeholder="0.00"
-              onChange={e => setAmountPaid(e.target.value)}
-            />
-          </div>
+            <div className="form-grid" style={{ gap: '12px', margin: '0 0 12px' }}>
+              <Field
+                label="Discount (₹)"
+                type="number"
+                min="0"
+                step="0.01"
+                value={discount}
+                placeholder="0.00"
+                onChange={e => setDiscount(e.target.value)}
+              />
 
-          <div className="form-grid">
+              <Field
+                label="Amount Received (₹)"
+                type="number"
+                min="0"
+                step="0.01"
+                value={amountPaid}
+                placeholder="0.00"
+                onChange={e => setAmountPaid(e.target.value)}
+              />
+            </div>
+
             <Field label="Payment Method">
-              <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
+              <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} style={{ minHeight: '40px' }}>
                 {paymentMethods.map(([val, label]) => (
                   <option key={val} value={val}>{label}</option>
                 ))}
               </select>
             </Field>
 
+            {/* Premium Billing Summary Box */}
             <div
+              className="sale-billing-summary"
               style={{
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                padding: '10px 14px',
-                background: '#edf6ef',
-                borderRadius: '10px',
-                border: '1px solid #b8dabf'
+                marginTop: '14px',
+                background: 'linear-gradient(135deg, #f4f9f5 0%, #edf6ef 100%)',
+                borderRadius: '12px',
+                border: '1.5px solid #b8dabf',
+                padding: '16px 18px',
+                boxShadow: '0 2px 8px rgba(26,102,64,0.06)'
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#486350', fontWeight: 600 }}>
-                <span>Total Amount:</span>
-                <strong style={{ fontSize: '16px', color: '#132e1e' }}>{currency(summary?.total || 0, settings.currency)}</strong>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #d5e6d8', paddingBottom: '8px', marginBottom: '10px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#254430', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                  Billing Breakdown
+                </span>
+                <span style={{ fontSize: '12px', color: '#4a6955', fontWeight: 600 }}>
+                  {items.reduce((s, i) => s + (Number(i.quantity) || 0), 0).toLocaleString()} bricks total
+                </span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginTop: '4px', color: '#486350', fontWeight: 600 }}>
-                <span>Balance Due:</span>
-                <strong style={{ fontSize: '16px', color: (summary?.balance || 0) > 0 ? '#b54708' : '#1a6640' }}>
-                  {currency(summary?.balance || 0, settings.currency)}
-                </strong>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', alignItems: 'center' }}>
+                <div>
+                  <span style={{ fontSize: '11.5px', color: '#526e5a', fontWeight: 600, display: 'block' }}>Subtotal</span>
+                  <span style={{ fontSize: '16px', fontWeight: 700, color: '#132e1e' }}>
+                    {currency(summary?.subtotal || 0, settings.currency)}
+                  </span>
+                </div>
+
+                {Number(discount) > 0 && (
+                  <div>
+                    <span style={{ fontSize: '11.5px', color: '#b54708', fontWeight: 600, display: 'block' }}>Discount</span>
+                    <span style={{ fontSize: '16px', fontWeight: 700, color: '#b54708' }}>
+                      −{currency(discount, settings.currency)}
+                    </span>
+                  </div>
+                )}
+
+                <div style={{ background: '#ffffff', padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #a3cca8' }}>
+                  <span style={{ fontSize: '11.5px', color: '#1a6640', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block' }}>
+                    Grand Total
+                  </span>
+                  <span style={{ fontSize: '20px', fontWeight: 800, color: '#1a6640' }}>
+                    {currency(summary?.total || 0, settings.currency)}
+                  </span>
+                </div>
+
+                <div>
+                  <span style={{ fontSize: '11.5px', color: '#526e5a', fontWeight: 600, display: 'block' }}>Paid Amount</span>
+                  <span style={{ fontSize: '16px', fontWeight: 700, color: '#132e1e' }}>
+                    {currency(amountPaid || 0, settings.currency)}
+                  </span>
+                </div>
+
+                <div>
+                  <span style={{ fontSize: '11.5px', color: '#526e5a', fontWeight: 600, display: 'block' }}>Balance Due</span>
+                  <span style={{ fontSize: '16px', fontWeight: 700, color: (summary?.balance || 0) > 0 ? '#b54708' : '#1a6640' }}>
+                    {currency(summary?.balance || 0, settings.currency)}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
