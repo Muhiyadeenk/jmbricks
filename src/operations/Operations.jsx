@@ -5,6 +5,7 @@ import {Button,Card,Badge,EmptyState,Field,SectionTitle,Table,Dialog,Brick,numbe
 import {supabase} from '../lib/supabase';
 import {catalog as loadCatalog,history,formats,detail,movements,currency,today,execute} from './api';
 import OperationForm,{titles} from './OperationForm';
+import SalesInvoice from './SalesInvoice';
 import Reports,{LiveDashboard} from './Reports';
 import Production,{ProductionOverview,displayDate} from './Production';
 const blankCatalog={products:[],customers:[],suppliers:[],categories:[]};
@@ -293,8 +294,77 @@ function HistoryPage({kind,revision,catalog,settings,canWrite,owner,open,onDetai
 function Pagination({page,count,setPage}){return <div className="pagination"><Button variant="secondary" disabled={!page} onClick={()=>setPage(p=>p-1)}>Previous</Button><span>Page {page+1} of {Math.max(1,Math.ceil(count/25))}</span><Button variant="secondary" disabled={(page+1)*25>=count} onClick={()=>setPage(p=>p+1)}>Next</Button></div>}
 function TransactionDetail({kind,id,catalog,settings,canWrite,owner,onClose,onPayment}){
  const [data,setData]=useState(null),[error,setError]=useState('');
- useEffect(()=>{let alive=true;detail(kind,id).then(v=>{if(alive)setData(v)}).catch(e=>{if(alive)setError(e.message)});return()=>{alive=false}},[kind,id]);
- return <Dialog title={kind==='sales'?'Sale receipt':`${formats[kind].title} details`} onClose={onClose}>{error?<p className="auth-error" role="alert">{error}</p>:!data?<p role="status">Loading transaction…</p>:<>{data.record.deleted_at&&<div className="notice"><strong>Deleted entry · excluded from active reports</strong><p>{data.record.deletion_reason}</p><small>{new Date(data.record.deleted_at).toLocaleString('en-IN')}</small></div>}<div className="receipt"><div className="receipt-head"><h2>{settings.business_name}</h2><p>{kind==='sales'?`Sale receipt S-${data.record.receipt_number}`:kind==='purchases'?`Purchase P-${data.record.reference_number}`:formats[kind].title}</p><p>{data.record[formats[kind].date]}</p></div><h3>{data.record[formats[kind].search]}</h3>{(data.record.customer_phone||data.record.supplier_phone)&&<p>{data.record.customer_phone||data.record.supplier_phone}</p>}{(data.record.customer_location||catalog?.customers?.find(c=>c.id===data.record.customer_id||c.name===data.record.customer_name)?.location)&&<p style={{color:'#1a6640',fontWeight:600}}>📍 {data.record.customer_location||catalog?.customers?.find(c=>c.id===data.record.customer_id||c.name===data.record.customer_name)?.location}</p>}{data.items.length>0&&<Table rows={data.items} columns={[{key:'name',label:'Product',render:r=>`${r.product_name||r.description}${r.product_code?` · ${r.product_code}`:''}`},{key:'quantity',label:'Quantity'},{key:'unit',label:'Unit price',render:r=>currency(r.unit_price??r.unit_cost,data.record.currency)},{key:'line_total',label:'Total',render:r=>currency(r.line_total,data.record.currency)}]}/ >}{kind==='production'?<dl className="review-list"><dt>Produced</dt><dd>{data.record.quantity_produced}</dd><dt>Rejected</dt><dd>{data.record.rejected_quantity}</dd><dt>Net bricks</dt><dd>{data.record.net_quantity}</dd><dt>Cost / good brick</dt><dd>{data.record.unit_cost===null?'Unknown':currency(data.record.unit_cost,settings.currency)}</dd></dl>:<dl className="review-list">{kind==='sales'&&<><dt>Subtotal</dt><dd>{currency(data.record.subtotal,data.record.currency)}</dd><dt>Discount</dt><dd>{currency(data.record.discount,data.record.currency)}</dd></>}<dt>Total</dt><dd>{currency(data.record.total??data.record.amount,data.record.currency)}</dd>{kind!=='expenses'&&<><dt>{kind==='sales'?'Received':'Paid'}</dt><dd>{currency(data.record.amount_received??data.record.amount_paid,data.record.currency)}</dd><dt>Outstanding</dt><dd>{currency(data.record.outstanding_balance,data.record.currency)}</dd></>}</dl>}{data.payments.length>0&&<><h3>Payments recorded</h3><Table rows={data.payments} columns={[{key:'payment_date',label:'Date'},{key:'payment_method',label:'Method'},{key:'amount',label:'Amount',render:r=>currency(r.amount,data.record.currency)}]}/></>}{data.record.notes&&<p className="receipt-notes">{data.record.notes}</p>}<p className="receipt-id">Record: {id}</p></div><div className="dialog-actions no-print">{owner&&!data.record.deleted_at&&['sales','purchases','expenses'].includes(kind)&&<Button variant="secondary" className="delete-action" onClick={()=>onPayment(`delete_${formats[kind].operation}`,{transaction_id:id})}><Trash2 size={16}/>Delete</Button>}{kind==='sales'&&<Button variant="secondary" onClick={()=>window.print()}><Printer size={16}/>Print receipt</Button>}{['sales','purchases'].includes(kind)&&canWrite&&!data.record.deleted_at&&Number(data.record.outstanding_balance)>0&&<Button onClick={()=>onPayment(kind==='sales'?'customer_payment':'supplier_payment',{transaction_id:id,outstanding:data.record.outstanding_balance})}>{kind==='sales'?'Receive payment':'Pay supplier'}</Button>}</div></>}</Dialog>;
+ const [previousBalance,setPreviousBalance]=useState(0);
+ useEffect(()=>{
+  let alive=true;
+  detail(kind,id).then(v=>{
+    if(alive) setData(v);
+    if(alive && kind==='sales' && v?.record?.customer_id){
+      supabase
+        .from('sales_history')
+        .select('outstanding_balance, sale_date, id')
+        .eq('customer_id', v.record.customer_id)
+        .neq('id', v.record.id)
+        .is('deleted_at', null)
+        .then(({data:priorSales})=>{
+          if(alive && priorSales){
+            const priorTotal = priorSales
+              .filter(s => s.sale_date <= v.record.sale_date)
+              .reduce((sum, s) => sum + Number(s.outstanding_balance || 0), 0);
+            setPreviousBalance(priorTotal);
+          }
+        });
+    }
+  }).catch(e=>{if(alive)setError(e.message)});
+  return()=>{alive=false};
+ },[kind,id]);
+
+ if (kind === 'sales') {
+  return (
+    <Dialog title="Sales Invoice" onClose={onClose}>
+      {error ? (
+        <p className="auth-error" role="alert">{error}</p>
+      ) : !data ? (
+        <p role="status">Loading invoice details…</p>
+      ) : (
+        <>
+          {data.record.deleted_at && (
+            <div className="notice no-print">
+              <strong>Deleted entry · excluded from active reports</strong>
+              <p>{data.record.deletion_reason}</p>
+              <small>{new Date(data.record.deleted_at).toLocaleString('en-IN')}</small>
+            </div>
+          )}
+          <SalesInvoice
+            record={data.record}
+            items={data.items}
+            payments={data.payments}
+            catalog={catalog}
+            settings={settings}
+            previousBalance={previousBalance}
+          />
+          <div className="dialog-actions no-print" style={{ marginTop: '16px' }}>
+            {owner && !data.record.deleted_at && (
+              <Button variant="secondary" className="delete-action" onClick={()=>onPayment('delete_sale',{transaction_id:id})}>
+                <Trash2 size={16}/> Delete Sale
+              </Button>
+            )}
+            {canWrite && !data.record.deleted_at && Number(data.record.outstanding_balance) > 0 && (
+              <Button onClick={()=>onPayment('customer_payment',{transaction_id:id,outstanding:data.record.outstanding_balance})}>
+                Receive payment
+              </Button>
+            )}
+            <Button variant="secondary" onClick={onClose}>
+              Close
+            </Button>
+          </div>
+        </>
+      )}
+    </Dialog>
+  );
+ }
+
+ return <Dialog title={`${formats[kind].title} details`} onClose={onClose}>{error?<p className="auth-error" role="alert">{error}</p>:!data?<p role="status">Loading transaction…</p>:<>{data.record.deleted_at&&<div className="notice"><strong>Deleted entry · excluded from active reports</strong><p>{data.record.deletion_reason}</p><small>{new Date(data.record.deleted_at).toLocaleString('en-IN')}</small></div>}<div className="receipt"><div className="receipt-head"><h2>{settings.business_name}</h2><p>{kind==='purchases'?`Purchase P-${data.record.reference_number}`:formats[kind].title}</p><p>{data.record[formats[kind].date]}</p></div><h3>{data.record[formats[kind].search]}</h3>{(data.record.customer_phone||data.record.supplier_phone)&&<p>{data.record.customer_phone||data.record.supplier_phone}</p>}{(data.record.customer_location||catalog?.customers?.find(c=>c.id===data.record.customer_id||c.name===data.record.customer_name)?.location)&&<p style={{color:'#1a6640',fontWeight:600}}>📍 {data.record.customer_location||catalog?.customers?.find(c=>c.id===data.record.customer_id||c.name===data.record.customer_name)?.location}</p>}{data.items.length>0&&<Table rows={data.items} columns={[{key:'name',label:'Product',render:r=>`${r.product_name||r.description}${r.product_code?` · ${r.product_code}`:''}`},{key:'quantity',label:'Quantity'},{key:'unit',label:'Unit price',render:r=>currency(r.unit_price??r.unit_cost,data.record.currency)},{key:'line_total',label:'Total',render:r=>currency(r.line_total,data.record.currency)}]}/ >}{kind==='production'?<dl className="review-list"><dt>Produced</dt><dd>{data.record.quantity_produced}</dd><dt>Rejected</dt><dd>{data.record.rejected_quantity}</dd><dt>Net bricks</dt><dd>{data.record.net_quantity}</dd><dt>Cost / good brick</dt><dd>{data.record.unit_cost===null?'Unknown':currency(data.record.unit_cost,settings.currency)}</dd></dl>:<dl className="review-list"><dt>Total</dt><dd>{currency(data.record.total??data.record.amount,data.record.currency)}</dd>{kind!=='expenses'&&<><dt>Paid</dt><dd>{currency(data.record.amount_received??data.record.amount_paid,data.record.currency)}</dd><dt>Outstanding</dt><dd>{currency(data.record.outstanding_balance,data.record.currency)}</dd></>}</dl>}{data.payments.length>0&&<><h3>Payments recorded</h3><Table rows={data.payments} columns={[{key:'payment_date',label:'Date'},{key:'payment_method',label:'Method'},{key:'amount',label:'Amount',render:r=>currency(r.amount,data.record.currency)}]}/></>}{data.record.notes&&<p className="receipt-notes">{data.record.notes}</p>}<p className="receipt-id">Record: {id}</p></div><div className="dialog-actions no-print">{owner&&!data.record.deleted_at&&['purchases','expenses'].includes(kind)&&<Button variant="secondary" className="delete-action" onClick={()=>onPayment(`delete_${formats[kind].operation}`,{transaction_id:id})}><Trash2 size={16}/>Delete</Button>}{['purchases'].includes(kind)&&canWrite&&!data.record.deleted_at&&Number(data.record.outstanding_balance)>0&&<Button onClick={()=>onPayment('supplier_payment',{transaction_id:id,outstanding:data.record.outstanding_balance})}>Pay supplier</Button>}</div></>}</Dialog>;
 }
 function MovementHistory({product,onClose}){
  const [page,setPage]=useState(0),[result,setResult]=useState({rows:[],count:0}),[loading,setLoading]=useState(true),[error,setError]=useState('');
