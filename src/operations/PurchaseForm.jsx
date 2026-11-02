@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Package, Plus, UserPlus, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { Button, Field, Dialog, Badge } from '../components';
 import { today, currency, execute } from './api';
+import { supabase } from '../lib/supabase';
 
 // Convert user-facing unit to PostgreSQL products_unit_check valid unit ('brick','bag','tonne','kg','litre','piece')
 export function toDbUnit(u) {
@@ -10,7 +11,7 @@ export function toDbUnit(u) {
   if (u === 'kg') return 'kg';
   if (u === 'litre') return 'litre';
   if (u === 'bag') return 'bag';
-  return 'piece';
+  return 'tonne';
 }
 
 // Convert PostgreSQL DB unit to human-readable friendly label
@@ -327,41 +328,93 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
       let resolvedProductId = null;
 
       // 1. If choice is an existing catalog product, use its ID
-      if (review.choice.type === 'existing') {
+      if (review.choice.type === 'existing' && review.choice.id) {
         resolvedProductId = review.choice.id;
       } else {
-        // 2. Need to ensure the raw material product exists in Supabase products table
-        // Check if a product with this exact name already exists in catalog
+        // 2. Check if product already exists in memory catalog (by name or code)
         const existing = (catalog.products || []).find(
-          p => p.kind === 'raw_material' && p.name.toLowerCase() === review.materialName.toLowerCase()
+          p => (p.kind === 'raw_material' && p.name.toLowerCase() === review.materialName.toLowerCase()) ||
+               (review.choice.code && p.code === review.choice.code)
         );
 
         if (existing) {
           resolvedProductId = existing.id;
         } else {
-          // Create the raw material product on the fly
-          setSavingProduct(true);
+          // Check directly in Supabase products table by code or name
           const rawCode = review.choice.code || `RM-${review.materialName.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 8)}`;
-          const created = await execute({
-            kind: 'product',
-            id: crypto.randomUUID(),
-            payload: {
-              name: review.materialName,
-              code: rawCode,
-              kind: 'raw_material',
-              unit: toDbUnit(review.unit),
-              is_stocked: true,
-              is_active: true,
-              length_mm: null,
-              width_mm: null,
-              height_mm: null,
-              production_cost: null,
-              selling_price: '0',
-              minimum_stock: '0',
+          if (supabase) {
+            try {
+              const { data: dbProd } = await supabase
+                .from('products')
+                .select('id, name, code, unit')
+                .or(`code.eq.${rawCode},name.ilike.${review.materialName.trim()}`)
+                .maybeSingle();
+              if (dbProd?.id) {
+                resolvedProductId = dbProd.id;
+              }
+            } catch (e) {
+              console.warn('Direct product check warning:', e);
             }
-          });
-          resolvedProductId = created?.id;
-          setSavingProduct(false);
+          }
+
+          // If still not found, create the raw material product in database
+          if (!resolvedProductId) {
+            setSavingProduct(true);
+            const initialUnit = toDbUnit(review.unit);
+            try {
+              const created = await execute({
+                kind: 'product',
+                id: crypto.randomUUID(),
+                payload: {
+                  name: review.materialName,
+                  code: rawCode,
+                  kind: 'raw_material',
+                  unit: initialUnit,
+                  is_stocked: true,
+                  is_active: true,
+                  length_mm: null,
+                  width_mm: null,
+                  height_mm: null,
+                  production_cost: null,
+                  selling_price: '0',
+                  minimum_stock: '0',
+                }
+              });
+              resolvedProductId = created?.id;
+            } catch (createErr) {
+              // If unit constraint fails in DB (e.g. piece was rejected), fallback to standard valid DB unit
+              if (createErr?.message && createErr.message.includes('products_unit_check')) {
+                const fallbackUnit = review.materialName.toLowerCase().includes('cement')
+                  ? 'bag'
+                  : review.materialName.toLowerCase().includes('chemical')
+                  ? 'litre'
+                  : 'tonne';
+                const createdFallback = await execute({
+                  kind: 'product',
+                  id: crypto.randomUUID(),
+                  payload: {
+                    name: review.materialName,
+                    code: rawCode,
+                    kind: 'raw_material',
+                    unit: fallbackUnit,
+                    is_stocked: true,
+                    is_active: true,
+                    length_mm: null,
+                    width_mm: null,
+                    height_mm: null,
+                    production_cost: null,
+                    selling_price: '0',
+                    minimum_stock: '0',
+                  }
+                });
+                resolvedProductId = createdFallback?.id;
+              } else {
+                throw createErr;
+              }
+            } finally {
+              setSavingProduct(false);
+            }
+          }
         }
       }
 

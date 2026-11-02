@@ -21,12 +21,52 @@ export async function allRows(table, configure=q=>q) {
   }
 }
 export async function catalog() {
-  const [products,customers,suppliers,categories]=await Promise.all([
-    allRows('production_inventory').then(rows=>rows.map(p=>({...p,brick_size:p.production_brick_size,default_quantity:p.production_default_quantity}))),
-    allRows('customers',q=>q.eq('is_active',true)),
-    allRows('suppliers',q=>q.eq('is_active',true)),
-    allRows('expense_categories',q=>q.eq('is_active',true)),
+  const [prodInventory, allProducts, customers, suppliers, categories] = await Promise.all([
+    allRows('production_inventory')
+      .then(rows => rows.map(p => ({ ...p, brick_size: p.production_brick_size, default_quantity: p.production_default_quantity })))
+      .catch(() => []),
+    allRows('products', q => q.eq('is_active', true)).catch(() => []),
+    allRows('customers', q => q.eq('is_active', true)).catch(() => []),
+    allRows('suppliers', q => q.eq('is_active', true)).catch(() => []),
+    allRows('expense_categories', q => q.eq('is_active', true)).catch(() => []),
   ]);
+
+  // Combine: finished bricks from production_inventory with raw materials from products table
+  const brickIds = new Set(prodInventory.map(p => p.id));
+  const rawProducts = allProducts.filter(p => !brickIds.has(p.id) && p.kind === 'raw_material');
+
+  // If there are raw materials, fetch latest stock_movements balances for them
+  if (rawProducts.length > 0) {
+    try {
+      const rawIds = rawProducts.map(p => p.id);
+      const { data: movements } = await supabase
+        .from('stock_movements')
+        .select('product_id, balance_after, posting_number')
+        .in('product_id', rawIds)
+        .order('posting_number', { ascending: false });
+
+      if (movements && movements.length > 0) {
+        const latestBalance = {};
+        for (const m of movements) {
+          if (latestBalance[m.product_id] === undefined) {
+            latestBalance[m.product_id] = m.balance_after;
+          }
+        }
+        rawProducts.forEach(p => {
+          if (latestBalance[p.id] !== undefined) {
+            p.available_quantity = Number(latestBalance[p.id]);
+          } else if (p.available_quantity === undefined) {
+            p.available_quantity = 0;
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Could not load raw material stock balances:', e);
+    }
+  }
+
+  const products = [...prodInventory, ...rawProducts];
+
   customers.sort((a,b)=>{
     if(a.created_at && b.created_at){
       const diff=new Date(b.created_at)-new Date(a.created_at);
