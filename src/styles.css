@@ -1873,56 +1873,414 @@ dialog:has(.a4-invoice-wrapper) {
   color: #4b6353;
 }
 
+/* Screen default for isolated print portal: completely hidden */
+#jm-invoice-print-portal {
+  display: none !important;
+}
+
 /* ==========================================================================
    PRINT SPECIFIC STYLES (A4 PORTRAIT)
    ========================================================================== */
 
 @page {
   size: A4 portrait;
-  margin: 10mm;
+  margin: 8mm;
 }
 
 @media print {
-  body:has(.a4-invoice-container) {
+  /* 1. Global Page Reset */
+  html,
+  body {
     background: #ffffff !important;
-  }
-
-  body:has(.a4-invoice-container) * {
-    visibility: hidden;
-  }
-
-  body:has(.a4-invoice-container) .a4-invoice-container,
-  body:has(.a4-invoice-container) .a4-invoice-container * {
-    visibility: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  .a4-invoice-container {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
+  /* 2. ABSOLUTE COMPONENT ISOLATION:
+     Completely hide the entire #root app when invoice is printing.
+     This guarantees no sidebar, header, navigation, bottom nav,
+     tables or modals can ever appear on the print output.
+  */
+  body:has(#jm-invoice-print-portal) #root,
+  body.is-printing-invoice #root {
+    display: none !important;
+    height: 0 !important;
+    width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    position: static !important;
+  }
+
+  /* Hide any other children attached to body except the print portal */
+  body:has(#jm-invoice-print-portal) > :not(#jm-invoice-print-portal),
+  body.is-printing-invoice > :not(#jm-invoice-print-portal) {
+    display: none !important;
+  }
+
+  /* Hide bottom nav, sidebar and fixed controls globally */
+  .mobile-bottom-nav,
+  .sidebar,
+  header,
+  .scrim,
+  .no-print,
+  .a4-invoice-actions,
+  .dialog-pull-bar,
+  .dialog-head,
+  .dialog-actions {
+    display: none !important;
+    position: static !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* 3. SHOW ONLY THE ISOLATED PRINT PORTAL AT THE TOP OF THE A4 PAGE */
+  #jm-invoice-print-portal {
+    display: block !important;
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
-    padding: 0 !important;
+    background: #ffffff !important;
+    box-sizing: border-box !important;
+  }
+
+  #jm-invoice-print-portal .a4-invoice-container,
+  .a4-invoice-container.print-portal-container {
+    position: static !important;
     margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+    page-break-after: auto !important;
+    break-after: auto !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Fallback in case browser doesn't support body:has */
+  body.is-printing-invoice dialog,
+  dialog:has(.a4-invoice-wrapper) {
+    position: static !important;
+    display: block !important;
+    inset: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
     border: none !important;
     box-shadow: none !important;
     background: #ffffff !important;
   }
 
-  .no-print,
-  dialog .dialog-head,
-  .dialog-actions,
-  .a4-invoice-actions {
-    display: none !important;
+  /* 4. Fine-tuned compact layout to guarantee single-page fitting for normal sales */
+  .invoice-header {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: flex-start !important;
+    margin-bottom: 8px !important;
+    padding: 0 !important;
   }
 
-  .a4-invoice-table tr,
-  .invoice-summary-section,
-  .invoice-footer {
+  .invoice-brand {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 14px !important;
+  }
+
+  .invoice-logo {
+    height: 52px !important;
+    max-width: 120px !important;
+    object-fit: contain !important;
+    border-radius: 4px !important;
+  }
+
+  .company-title {
+    font-size: 22px !important;
+    font-weight: 800 !important;
+    color: #132e1e !important;
+    line-height: 1.15 !important;
+    margin: 0 !important;
+  }
+
+  .company-tagline {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    color: #2e6945 !important;
+    margin: 2px 0 3px !important;
+  }
+
+  .company-contacts {
+    font-size: 10.5px !important;
+    color: #4b6353 !important;
+    line-height: 1.35 !important;
+  }
+
+  .tax-invoice-label {
+    background: #1a6640 !important;
+    color: #ffffff !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    padding: 3px 12px !important;
+    border-radius: 3px !important;
+    letter-spacing: 1px !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .invoice-number-box {
+    margin-top: 5px !important;
+  }
+
+  .inv-label {
+    font-size: 10px !important;
+    color: #687e70 !important;
+  }
+
+  .inv-val {
+    font-size: 16px !important;
+    font-weight: 800 !important;
+    color: #132e1e !important;
+  }
+
+  .invoice-divider {
+    height: 2px !important;
+    background: #1a6640 !important;
+    margin: 6px 0 10px !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .invoice-info-grid {
+    display: grid !important;
+    grid-template-columns: 1.25fr 1fr !important;
+    gap: 14px !important;
+    padding: 8px 12px !important;
+    margin-bottom: 10px !important;
+    border: 1px solid #dce8de !important;
+    border-radius: 6px !important;
+    background: #f8faf8 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .info-section-title {
+    font-size: 9.5px !important;
+    font-weight: 700 !important;
+    color: #55725f !important;
+    margin-bottom: 3px !important;
+  }
+
+  .info-detail-name {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    color: #132e1e !important;
+    margin-bottom: 2px !important;
+  }
+
+  .info-detail-item {
+    font-size: 11px !important;
+    color: #374151 !important;
+    margin-top: 2px !important;
+  }
+
+  .info-meta-row {
+    font-size: 11px !important;
+    margin-top: 3px !important;
+  }
+
+  .invoice-meta {
+    padding-left: 12px !important;
+    border-left: 1px solid #e1ebe3 !important;
+  }
+
+  /* Items Table */
+  .invoice-table-wrap {
+    margin-bottom: 10px !important;
+    overflow: visible !important;
+  }
+
+  .a4-invoice-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 11px !important;
+  }
+
+  .a4-invoice-table thead {
+    display: table-header-group !important;
+  }
+
+  .a4-invoice-table th {
+    background: #1a6640 !important;
+    color: #ffffff !important;
+    font-size: 10.5px !important;
+    font-weight: 700 !important;
+    padding: 6px 8px !important;
+    border: 1px solid #1a6640 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .a4-invoice-table td {
+    padding: 6px 8px !important;
+    border: 1px solid #e2ece4 !important;
+    color: #1f2937 !important;
+  }
+
+  .a4-invoice-table tr {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
+  }
+
+  .a4-invoice-table tbody tr:nth-child(even) {
+    background: #fbfdfb !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Summary Section */
+  .invoice-summary-section {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: flex-start !important;
+    gap: 16px !important;
+    margin-top: 6px !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .invoice-summary-left {
+    flex: 1.1 !important;
+  }
+
+  .invoice-summary-right {
+    flex: 0.9 !important;
+    max-width: 300px !important;
+  }
+
+  .amount-in-words-box {
+    padding: 6px 10px !important;
+    background: #f8faf8 !important;
+    border: 1px solid #dce8de !important;
+    border-radius: 4px !important;
+    margin-bottom: 6px !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .amount-words-title {
+    font-size: 9px !important;
+    color: #55725f !important;
+  }
+
+  .amount-words-text {
+    font-size: 11px !important;
+    color: #1a6640 !important;
+    font-weight: 700 !important;
+  }
+
+  .summary-row {
+    font-size: 11px !important;
+    padding: 2.5px 0 !important;
+  }
+
+  .grand-total-box {
+    background: #f0f7f2 !important;
+    border: 1px solid #b8dabf !important;
+    border-radius: 4px !important;
+    padding: 5px 8px !important;
+    margin: 3px 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .grand-total-label {
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    color: #132e1e !important;
+  }
+
+  .grand-total-val {
+    font-size: 14.5px !important;
+    font-weight: 800 !important;
+    color: #132e1e !important;
+  }
+
+  .balance-row .summary-value {
+    font-size: 13px !important;
+    font-weight: 800 !important;
+  }
+
+  /* Footer */
+  .invoice-footer {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: flex-end !important;
+    border-top: 1.5px solid #dce8de !important;
+    margin-top: 14px !important;
+    padding-top: 10px !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .footer-tagline {
+    font-size: 11.5px !important;
+    font-weight: 700 !important;
+    color: #1a6640 !important;
+  }
+
+  .footer-company {
+    font-size: 10.5px !important;
+    color: #374151 !important;
+  }
+
+  .footer-terms {
+    font-size: 9.5px !important;
+    color: #6b7280 !important;
+    max-width: 360px !important;
+  }
+
+  .signature-box {
+    min-width: 150px !important;
+    text-align: center !important;
+  }
+
+  .signature-line {
+    width: 100% !important;
+    height: 1px !important;
+    background: #9ca3af !important;
+    margin-bottom: 4px !important;
+  }
+
+  .sign-title {
+    font-size: 10.5px !important;
+    font-weight: 700 !important;
+  }
+
+  .sign-company {
+    font-size: 9.5px !important;
+    color: #4b6353 !important;
   }
 }
 

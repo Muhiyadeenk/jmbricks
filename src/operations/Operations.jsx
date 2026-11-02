@@ -38,7 +38,7 @@ export default function Operations({profile,settings}) {
     if(lock.current)return;lock.current=true;setBusy(true);setSaveError('');
     try{const result=await execute(request);completed(request,result);}
     catch(err){
-      if(!err.uncertain){clearPending();setModal({kind:request.kind,initial:request.payload});}
+      if(!err.uncertain || err.message?.includes('permission denied')){clearPending();setModal({kind:request.kind,initial:request.payload});}
       setSaveError(err.message);
     }finally{lock.current=false;setBusy(false);}
   }
@@ -76,185 +76,134 @@ export default function Operations({profile,settings}) {
         }
       }
     }}/>}
-    {pending&&<Dialog title="Submission status" onClose={()=>{}}><p>{busy?'Saving your entry…':'This entry needs confirmation. Keep its request ID and retry the original submission if the connection was interrupted.'}</p><div className="notice">{titles[pending.kind]}<br/>Request: {pending.id}</div>{saveError&&<div className="auth-error" role="alert">{saveError}</div>}<div className="dialog-actions"><Button variant="secondary" disabled={busy} onClick={checkPending}>Check saved status</Button><Button disabled={busy} onClick={()=>send(pending)}>{busy?'Please wait…':'Retry original entry'}</Button></div></Dialog>}
+    {pending&&<Dialog title="Submission status" onClose={clearPending}><p>{busy?'Saving your entry…':'This entry needs confirmation. Keep its request ID and retry the original submission if the connection was interrupted.'}</p><div className="notice">{titles[pending.kind]}<br/>Request: {pending.id}</div>{saveError&&<div className="auth-error" role="alert">{saveError}</div>}<div className="dialog-actions"><Button variant="secondary" onClick={clearPending}>Dismiss</Button><Button variant="secondary" disabled={busy} onClick={checkPending}>Check saved status</Button><Button disabled={busy} onClick={()=>send(pending)}>{busy?'Please wait…':'Retry original entry'}</Button></div></Dialog>}
     {selected&&!modal&&!pending&&<TransactionDetail key={`${selected.kind}-${selected.id}-${revision}`} {...selected} catalog={catalog} settings={settings} canWrite={canWrite} owner={owner} onClose={()=>setSelected(null)} onPayment={open}/>}
     {stockHistory&&!modal&&!pending&&<MovementHistory product={stockHistory} onClose={()=>setStockHistory(null)}/>}
   </>;
 }
 function StockPage({catalog,settings,owner,open,onHistory}){
  const [search,setSearch]=useState(''),[filter,setFilter]=useState('all');
- const status=p=>!p.is_stocked?'Not tracked':Number(p.available_quantity)===0?'Out of Stock':Number(p.available_quantity)<=Number(p.minimum_stock||0)?'Low Stock':'In Stock';
+ const status=p=>!p.is_stocked?'Not tracked':Number(p.available_quantity)===0?'Out of Stock':Number(p.available_quantity)<=Number(p.minimum_stock)?'Low Stock':'In Stock';
+ const list=catalog.products.filter(p=>`${p.name} ${p.code} ${p.size_label||''}`.toLowerCase().includes(search.toLowerCase())&&(filter==='all'||filter==='inactive'&&!p.is_active||filter==='finished_brick'&&p.kind===filter||filter==='raw_material'&&p.kind===filter||String(p.brick_size)===filter||status(p)===filter));
 
- // Filtered list based on search and status
- const matchesSearch = p => `${p.name} ${p.code} ${p.size_label||''}`.toLowerCase().includes(search.toLowerCase());
+ const brickList = list.filter(p => p.kind === 'finished_brick');
+ const rawList = list.filter(p => p.kind === 'raw_material');
 
- // Separate into Finished Bricks and Raw Materials
- const brickList = catalog.products.filter(p => p.kind === 'finished_brick' && matchesSearch(p) && (filter==='all'||filter==='finished_brick'||String(p.brick_size)===filter||status(p)===filter||(filter==='inactive'&&!p.is_active)));
+ const showBricks = filter === 'all' || filter === 'finished_brick' || ['4','5','6','8'].includes(filter) || brickList.length > 0;
+ const showRaw = filter === 'all' || filter === 'raw_material' || rawList.length > 0;
 
- // Standard raw material templates
- const stdRawTemplates = [
-   { name: 'Cement', code: 'RM-CEMENT', unit: 'bag', minimum_stock: 50 },
-   { name: 'Baby Metal', code: 'RM-BABYMETAL', unit: 'tonne', minimum_stock: 10 },
-   { name: 'Dust', code: 'RM-DUST', unit: 'tonne', minimum_stock: 10 },
-   { name: 'Chemical', code: 'RM-CHEMICAL', unit: 'litre', minimum_stock: 20 },
- ];
-
- // Combine standard raw materials with any custom raw materials in catalog
- const rawList = useMemo(() => {
-   const existingRaw = catalog.products.filter(p => p.kind === 'raw_material');
-   const result = [];
-   const seenCodes = new Set();
-
-   // 1. First add/match standard raw materials
-   stdRawTemplates.forEach(std => {
-     const found = existingRaw.find(p => p.code === std.code || p.name.toLowerCase() === std.name.toLowerCase());
-     if (found) {
-       result.push(found);
-       seenCodes.add(found.id);
-     } else {
-       // Display standard material template ready in yard
-       result.push({
-         id: `std-${std.code}`,
-         code: std.code,
-         name: std.name,
-         kind: 'raw_material',
-         unit: std.unit,
-         is_stocked: true,
-         is_active: true,
-         available_quantity: 0,
-         minimum_stock: std.minimum_stock,
-         isTemplate: true
-       });
-     }
-   });
-
-   // 2. Add other raw materials created in catalog
-   existingRaw.forEach(p => {
-     if (!seenCodes.has(p.id)) {
-       result.push(p);
-     }
-   });
-
-   return result.filter(p => matchesSearch(p) && (filter==='all'||filter==='raw_material'||status(p)===filter||(filter==='inactive'&&!p.is_active)));
- }, [catalog.products, search, filter]);
-
- const showBricks = filter === 'all' || filter === 'finished_brick' || ['4','5','6','8'].includes(filter) || (brickList.length > 0 && filter !== 'raw_material');
- const showRaw = filter === 'all' || filter === 'raw_material' || (rawList.length > 0 && !['4','5','6','8','finished_brick'].includes(filter));
+ function renderCard(p) {
+   return (
+     <Card className="product-card" key={p.id}>
+       <div className="product-top">
+         <span>{p.code}</span>
+         <Badge tone={status(p)==='In Stock'?'green':status(p)==='Low Stock'?'amber':'neutral'}>{!p.is_active?'Inactive':status(p)}</Badge>
+       </div>
+       <div className="brick-stage">
+         {p.brick_size&&<span className="stock-size">{p.brick_size}<small>INCH</small></span>}
+         {p.kind==='finished_brick'?<Brick/>:<Package size={68} color="#2b6b47"/>}
+       </div>
+       <h3>{p.name}</h3>
+       <p>{p.kind==='finished_brick'?`${p.length_mm} × ${p.width_mm} × ${p.height_mm} mm`:p.unit}{p.size_label?` · ${p.size_label}`:''}</p>
+       <div className="product-numbers">
+         <div>
+           <strong>{p.is_stocked?number(p.available_quantity):'—'}</strong>
+           <small>{p.is_stocked?`${p.unit} ${p.kind==='raw_material'?'in stock':'available'}`:'Not stocked'}</small>
+         </div>
+         {p.kind==='finished_brick'?(
+           <b>{currency(p.selling_price,settings.currency)}<small>selling price / {p.unit}</small></b>
+         ):(
+           <b>Raw Material<small>For brick production</small></b>
+         )}
+       </div>
+       <div className="product-footer">Minimum stock<strong>{number(p.minimum_stock)}</strong></div>
+       <div className="product-footer">Stock value<strong>{p.inventory_value==null?'Unknown':currency(p.inventory_value,settings.currency)}</strong></div>
+       {p.kind==='finished_brick'?(
+         <>
+           {[['total_produced','Total production'],['total_sold','Total sold'],['total_rejected','Rejected bricks'],['other_stock_change','Other receipts / adjustments']].map(([key,label])=><div className="product-footer" key={key}>{label}<strong>{number(p[key]||0)}</strong></div>)}
+           <div className="product-footer">Last production<strong>{displayDate(p.last_production_date)}</strong></div>
+         </>
+       ):(
+         <div className="product-footer">Purchased / Added<strong>{number(p.other_stock_change||0)} {p.unit}</strong></div>
+       )}
+       <div className="product-buttons">
+         {p.is_stocked&&<Button variant="secondary" onClick={()=>onHistory(p)}><History size={14}/>History</Button>}
+       </div>
+     </Card>
+   );
+ }
 
  return (
    <div className="stock-refresh">
      <div className="stock-intro">
        <div>
          <span className="eyebrow">JM BRICKS · INVENTORY</span>
-         <h2>Yard & Raw Material Stock</h2>
-         <p>Finished bricks ready for sale and raw materials for daily manufacturing.</p>
+         <h2>Your yard & raw materials at a glance.</h2>
+         <p>Finished bricks and manufacturing materials ready for daily production.</p>
        </div>
-       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-         <Button onClick={()=>open('purchase')} style={{ background: '#25744f', color: '#fff', border: 'none' }}>+ Purchase Raw Material</Button>
-         <Link className="btn secondary" to="/production">Daily Production →</Link>
-       </div>
+       <Link className="btn secondary" to="/production">Go to Production →</Link>
      </div>
-
-     {/* Category Filter Pills & Search */}
-     <div className="toolbar" style={{ flexWrap: 'wrap', gap: '12px' }}>
-       <div className="search" style={{ flex: '1 1 260px' }}>
+     <div className="toolbar">
+       <div className="search">
          <Search size={18}/>
-         <input aria-label="Search products" placeholder="Search brick size, cement, baby metal, dust…" value={search} onChange={e=>setSearch(e.target.value)}/>
+         <input aria-label="Search products" placeholder="Search product name, code or raw material…" value={search} onChange={e=>setSearch(e.target.value)}/>
        </div>
-       <select aria-label="Filter products" value={filter} onChange={e=>setFilter(e.target.value)} style={{ minWidth: '180px' }}>
-         {[['all','All Inventory'],['finished_brick','🧱 Finished Bricks Only'],['raw_material','📦 Raw Materials Only'],... [4,5,6,8].map(s=>[String(s),`${s}-inch Bricks`]),['Low Stock','⚠️ Low Stock Items'],['Out of Stock','❌ Out of Stock'],['inactive','Inactive']].map(([v,l])=><option key={v} value={v}>{l}</option>)}
+       <select aria-label="Filter products" value={filter} onChange={e=>setFilter(e.target.value)}>
+         {[['all','All inventory'],... [4,5,6,8].map(s=>[String(s),`${s}-inch bricks`]),['finished_brick','Finished bricks only'],['raw_material','Raw materials only (Baby Metal, Dust, Cement, Chemical)'],['Low Stock','Low Stock'],['Out of Stock','Out of Stock'],['inactive','Inactive']].map(([v,l])=><option key={v} value={v}>{l}</option>)}
        </select>
      </div>
+     <div className="stock-layout">
+       <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+         {/* 1. Finished Brick Stock Section */}
+         {showBricks && (
+           <div className="stock-section">
+             <SectionTitle title="Finished Brick Stock" subtitle="Finished bricks ready for sale" />
+             <div className="product-grid" style={{ marginTop: '12px' }}>
+               {[4,5,6,8].filter(size=>!catalog.products.some(p=>Number(p.brick_size)===size)&&(filter==='all'||filter==='finished_brick'||filter===String(size))&&!search).map(size=><Card key={`missing-${size}`} className="product-card unconfigured"><div className="product-top"><span>BRICK COLLECTION</span><Badge tone="neutral">Setup needed</Badge></div><div className="brick-stage"><span className="stock-size">{size}<small>INCH</small></span><Brick/></div><h3>{size}-inch Brick</h3><div className="stock-pending"><strong>—</strong><span>Stock available after setup</span></div><Link className="stock-setup" to="/production">Configure this brick <span>↗</span></Link></Card>)}
+               {brickList.map(renderCard)}
+               {brickList.length === 0 && !search && filter === 'finished_brick' && (
+                 <Card style={{ gridColumn: '1 / -1' }}><EmptyState title="No finished bricks found" description="No finished brick products match the selected filter."/></Card>
+               )}
+             </div>
+           </div>
+         )}
 
-     {/* 1. Finished Brick Stock Section */}
-     {showBricks && (
-       <section style={{ marginBottom: '32px' }}>
-         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '2px solid #e1ebe3', paddingBottom: '8px' }}>
-           <h3 style={{ margin: 0, fontSize: '18px', color: '#1a4e36', display: 'flex', alignItems: 'center', gap: '8px' }}>
-             🧱 Finished Brick Stock
-             <Badge tone="neutral">{brickList.length} sizes</Badge>
-           </h3>
-           <Link to="/production" style={{ fontSize: '13px', color: '#25744f', fontWeight: 600, textDecoration: 'none' }}>View Production History →</Link>
+         {/* 2. Raw Material Stock Section */}
+         {showRaw && (
+           <div className="stock-section">
+             <SectionTitle title="Raw Material Stock" subtitle="Manufacturing materials (Cement, Baby Metal, Dust, Chemical)" />
+             <div className="product-grid" style={{ marginTop: '12px' }}>
+               {rawList.map(renderCard)}
+               {rawList.length === 0 && (
+                 <Card style={{ gridColumn: '1 / -1' }}>
+                   <EmptyState
+                     title="No raw material stock records found"
+                     description="No raw materials are currently tracked in your products inventory."
+                   />
+                 </Card>
+               )}
+             </div>
+           </div>
+         )}
+
+         {list.length === 0 && catalog.products.length > 0 && search && (
+           <Card><EmptyState title="No items found" description="No products or materials matched your search."/></Card>
+         )}
+       </div>
+       <Card className="inventory-aside">
+         <span className="eyebrow">YOUR STOCK, CLEARLY</span>
+         <Brick/>
+         <h2>Every brick.<br/>Every material.</h2>
+         <p>Purchases add raw materials (Cement, M-Sand, P-Sand, Dust). Daily production converts materials into finished bricks. Sales deliver finished bricks.</p>
+         <div className="inventory-tip">
+           <div>
+             <strong>Opening balances & corrections</strong>
+             <p>Use an owner-authorized adjustment with a reason. Stock entries must not predate the latest movement for that product.</p>
+           </div>
          </div>
-
-         <div className="product-grid">
-           {[4,5,6,8].filter(size=>!catalog.products.some(p=>Number(p.brick_size)===size)&&(filter==='all'||filter==='finished_brick'||filter===String(size))&&!search).map(size=><Card key={`missing-${size}`} className="product-card unconfigured"><div className="product-top"><span>BRICK COLLECTION</span><Badge tone="neutral">Setup needed</Badge></div><div className="brick-stage"><span className="stock-size">{size}<small>INCH</small></span><Brick/></div><h3>{size}-inch Brick</h3><div className="stock-pending"><strong>—</strong><span>Stock available after setup</span></div><Link className="stock-setup" to="/production">Configure this brick <span>↗</span></Link></Card>)}
-           {brickList.map(p=>(
-             <Card className="product-card" key={p.id}>
-               <div className="product-top">
-                 <span>{p.code}</span>
-                 <Badge tone={status(p)==='In Stock'?'green':status(p)==='Low Stock'?'amber':'neutral'}>{!p.is_active?'Inactive':status(p)}</Badge>
-               </div>
-               <div className="brick-stage">
-                 {p.brick_size&&<span className="stock-size">{p.brick_size}<small>INCH</small></span>}
-                 <Brick/>
-               </div>
-               <h3>{p.name}</h3>
-               <p>{p.length_mm} × {p.width_mm} × {p.height_mm} mm{p.size_label?` · ${p.size_label}`:''}</p>
-               <div className="product-numbers">
-                 <div>
-                   <strong>{number(p.available_quantity)}</strong>
-                   <small>Bricks available in yard</small>
-                 </div>
-                 <b>{currency(p.selling_price,settings.currency)}<small>selling price / brick</small></b>
-               </div>
-               <div className="product-footer">Minimum stock<strong>{number(p.minimum_stock)}</strong></div>
-               <div className="product-footer">Stock value<strong>{p.inventory_value==null?'Unknown':currency(p.inventory_value,settings.currency)}</strong></div>
-               {[['total_produced','Total produced'],['total_sold','Total sold'],['total_rejected','Rejected bricks']].map(([key,label])=><div className="product-footer" key={key}>{label}<strong>{number(p[key]||0)}</strong></div>)}
-               <div className="product-buttons">
-                 {p.is_stocked&&<Button variant="secondary" onClick={()=>onHistory(p)}><History size={14}/>History</Button>}
-               </div>
-             </Card>
-           ))}
-         </div>
-       </section>
-     )}
-
-     {/* 2. Raw Material Stock Section */}
-     {showRaw && (
-       <section style={{ marginBottom: '32px' }}>
-         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '2px solid #e1ebe3', paddingBottom: '8px' }}>
-           <h3 style={{ margin: 0, fontSize: '18px', color: '#1a4e36', display: 'flex', alignItems: 'center', gap: '8px' }}>
-             📦 Raw Material Stock
-             <Badge tone="neutral">{rawList.length} materials</Badge>
-           </h3>
-           <Button variant="secondary" onClick={()=>open('purchase')} style={{ fontSize: '12px', padding: '6px 12px' }}>+ Purchase Stock</Button>
-         </div>
-
-         <div className="product-grid">
-           {rawList.map(p=>(
-             <Card className="product-card" key={p.id} style={{ borderColor: '#d3e2d6' }}>
-               <div className="product-top">
-                 <span>{p.code}</span>
-                 <Badge tone={status(p)==='In Stock'?'green':status(p)==='Low Stock'?'amber':'neutral'}>{!p.is_active?'Inactive':status(p)}</Badge>
-               </div>
-               <div className="brick-stage" style={{ background: 'linear-gradient(135deg, #f0f7f2, #e3efe7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                 <Package size={64} color="#1b6641" style={{ filter: 'drop-shadow(0 8px 12px rgba(27,102,65,0.18))' }}/>
-               </div>
-               <h3>{p.name}</h3>
-               <p style={{ textTransform: 'capitalize' }}>Unit: <strong>{p.unit === 'piece' ? 'Nos' : p.unit}</strong> · Yard Raw Material</p>
-               <div className="product-numbers" style={{ background: '#eaf4ee' }}>
-                 <div>
-                   <strong style={{ color: '#145c38' }}>{number(p.available_quantity || 0)}</strong>
-                   <small>{p.unit === 'piece' ? 'Nos' : p.unit} available in yard</small>
-                 </div>
-                 <b>Stock Status<small>{status(p)}</small></b>
-               </div>
-               <div className="product-footer">Material Code<strong>{p.code}</strong></div>
-               <div className="product-footer">Minimum reserve<strong>{number(p.minimum_stock || 0)} {p.unit}</strong></div>
-               <div className="product-buttons" style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                 <Button onClick={()=>open('purchase')} style={{ flex: 1, fontSize: '12px', background: '#1c6843', color: '#fff', border: 'none' }}>+ Purchase</Button>
-                 {!p.isTemplate && <Button variant="secondary" onClick={()=>onHistory(p)} style={{ fontSize: '12px' }}><History size={14}/>History</Button>}
-               </div>
-             </Card>
-           ))}
-         </div>
-       </section>
-     )}
-
-     {!brickList.length && !rawList.length && (
-       <Card><EmptyState title="No stock items found" description="Change your search or filter to see inventory."/></Card>
-     )}
+         <p>Maintain accurate raw material stocks to easily plan upcoming production runs.</p>
+       </Card>
+     </div>
    </div>
  );
 }

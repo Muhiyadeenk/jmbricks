@@ -135,11 +135,9 @@ export default function Production({ catalog, settings, profile, revision, onCha
         p_payload:    request.payload,
       });
       if (error) {
-        if (error.code && /^(22|23|42|P0)/.test(error.code)) {
-          sessionStorage.removeItem(key);
-          setPending(null);
-          setEdit({ ...request.payload, status: request.originalStatus || 'draft' });
-        }
+        sessionStorage.removeItem(key);
+        setPending(null);
+        setEdit({ ...request.payload, status: request.originalStatus || 'draft' });
         throw error;
       }
       sessionStorage.removeItem(key);

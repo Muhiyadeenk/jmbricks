@@ -336,31 +336,14 @@ export default function SaleForm({
       }
 
       if (!savedRecord || !savedRecord.id) {
-        // Resilient in-session customer object so sale flow is never blocked
-        savedRecord = {
-          ...insertPayload,
-          location: trimmedLocation,
-          created_at: nowIso,
-          _isNewlyCreated: true,
-          isPendingNew: true
-        };
+        throw new Error('Customer could not be created in database.');
       }
 
       // Automatically update state, select new customer, and close modal
       completeCustomerSave(savedRecord);
     } catch (err) {
-      console.warn('Customer save warning, using resilient fallback:', err);
-      const fallbackRecord = {
-        id: newId,
-        name: trimmedName,
-        phone: trimmedPhone,
-        location: trimmedLocation,
-        is_active: true,
-        created_at: nowIso,
-        _isNewlyCreated: true,
-        isPendingNew: true
-      };
-      completeCustomerSave(fallbackRecord);
+      console.error('Customer save error:', err);
+      setCustomerError(err.message || 'Unable to save customer to database.');
     } finally {
       setCustomerSaving(false);
     }
