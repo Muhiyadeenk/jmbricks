@@ -1,8 +1,10 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Printer, Download, MapPin, Phone, Calendar, FileText, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
-import { Button } from '../components';
+import { Printer, Download, MapPin, Phone, Calendar, FileText, CheckCircle2, Clock, AlertCircle, MessageCircle } from 'lucide-react';
+import { Button, Dialog } from '../components';
 import { currency } from './api';
+import { parseDeliveryLocations, formatWhatsAppInvoiceMessage } from './locationHelpers';
+import { downloadInvoicePdf, shareInvoiceViaWhatsApp, downloadBlob } from './pdfInvoiceGenerator.js';
 
 // Helper to convert Indian Rupees numbers into Words
 function numberToWordsINR(amount) {
@@ -108,6 +110,91 @@ export default function SalesInvoice({
     }, 500);
   }
 
+  const [isSharing, setIsSharing] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [desktopPrompt, setDesktopPrompt] = useState(null);
+
+  const { userNotes, primaryLocation, extraLocations } = useMemo(() => {
+    return parseDeliveryLocations(record.notes);
+  }, [record.notes]);
+
+  const invoiceDataPayload = useMemo(() => ({
+    record,
+    items,
+    payments,
+    catalog,
+    settings,
+    customerName,
+    customerPhone,
+    customerLocation,
+    primaryLocation,
+    extraLocations,
+    cleanNotes: userNotes,
+    subtotal,
+    discount,
+    grandTotal,
+    amountPaid,
+    outstanding
+  }), [
+    record,
+    items,
+    payments,
+    catalog,
+    settings,
+    customerName,
+    customerPhone,
+    customerLocation,
+    primaryLocation,
+    extraLocations,
+    userNotes,
+    subtotal,
+    discount,
+    grandTotal,
+    amountPaid,
+    outstanding
+  ]);
+
+  async function handleShareWhatsApp() {
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      await shareInvoiceViaWhatsApp(invoiceDataPayload, (info) => {
+        setDesktopPrompt(info);
+      });
+    } catch (err) {
+      console.error('WhatsApp share error:', err);
+      // Fall back to text share if anything fails
+      const { shareUrl } = formatWhatsAppInvoiceMessage({
+        record,
+        items,
+        customerName,
+        customerPhone,
+        subtotal,
+        discount,
+        grandTotal,
+        amountPaid,
+        outstanding,
+        catalog
+      });
+      window.open(shareUrl, '_blank', 'noopener,noreferrer');
+    } finally {
+      setIsSharing(false);
+    }
+  }
+
+  async function handleDownloadPdfAction() {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    try {
+      await downloadInvoicePdf(invoiceDataPayload);
+    } catch (err) {
+      console.error('PDF download error:', err);
+      handlePrintAction();
+    } finally {
+      setIsDownloading(false);
+    }
+  }
+
   const invoiceSheetProps = {
     record,
     items,
@@ -117,6 +204,9 @@ export default function SalesInvoice({
     customerName,
     customerPhone,
     customerLocation,
+    primaryLocation,
+    extraLocations,
+    cleanNotes: userNotes,
     currencyCode,
     subtotal,
     discount,
@@ -142,8 +232,24 @@ export default function SalesInvoice({
             </span>
           </div>
           <div className="a4-invoice-actions-right">
-            <Button variant="secondary" onClick={handlePrintAction} title="Download or Save as PDF">
-              <Download size={16} /> Download PDF
+            <Button
+              variant="secondary"
+              disabled={isSharing}
+              onClick={handleShareWhatsApp}
+              title="Share PDF Invoice on WhatsApp"
+              style={{ color: '#128c7e', borderColor: '#25d36650', background: '#eafaf1' }}
+            >
+              <MessageCircle size={16} color="#25d366" />
+              {isSharing ? 'Generating PDF…' : 'WhatsApp Bill'}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={isDownloading}
+              onClick={handleDownloadPdfAction}
+              title="Download Official PDF Invoice"
+            >
+              <Download size={16} />
+              {isDownloading ? 'Downloading…' : 'Download PDF'}
             </Button>
             <Button onClick={handlePrintAction} title="Print Invoice">
               <Printer size={16} /> Print Invoice
@@ -154,6 +260,56 @@ export default function SalesInvoice({
         {/* ── SCREEN PREVIEW A4 INVOICE SHEET ─────────────────────────────── */}
         <InvoiceSheet {...invoiceSheetProps} />
       </div>
+
+      {/* ── DESKTOP WHATSAPP SHARE GUIDANCE MODAL ───────────────────────── */}
+      {desktopPrompt && (
+        <Dialog title="Share Invoice on WhatsApp" onClose={() => setDesktopPrompt(null)}>
+          <div style={{ padding: '4px 0' }}>
+            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+              <div style={{ fontSize: '38px', marginBottom: '8px' }}>📄</div>
+              <h3 style={{ margin: '0 0 6px', color: '#132e1e', fontSize: '17px' }}>
+                {desktopPrompt.fileName} Downloaded
+              </h3>
+              <p style={{ margin: 0, color: '#687e70', fontSize: '13px' }}>
+                The official PDF invoice has been downloaded to your computer.
+              </p>
+            </div>
+
+            <div style={{ background: '#f4f9f5', border: '1px solid #d5e5da', borderRadius: '8px', padding: '14px', marginBottom: '18px', fontSize: '13px' }}>
+              <p style={{ margin: '0 0 6px', fontWeight: 700, color: '#1a6640', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <MessageCircle size={16} color="#25d366" /> WhatsApp Web is opening for:
+              </p>
+              <p style={{ margin: '0 0 6px', color: '#132e1e' }}>
+                <strong>Customer:</strong> {desktopPrompt.customerName} {desktopPrompt.customerPhone ? `(${desktopPrompt.customerPhone})` : ''}
+              </p>
+              <p style={{ margin: 0, color: '#354d3e', fontSize: '12.5px', lineHeight: 1.5 }}>
+                👉 In the opened WhatsApp Web tab, click the <strong>attach (📎)</strong> icon, choose <strong>Document</strong>, and select <strong>{desktopPrompt.fileName}</strong> to send.
+              </p>
+            </div>
+
+            <div className="dialog-actions">
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => downloadBlob(desktopPrompt.pdfBlob, desktopPrompt.fileName)}
+              >
+                <Download size={15} /> Download PDF Again
+              </Button>
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => window.open(desktopPrompt.waUrl, '_blank', 'noopener,noreferrer')}
+                style={{ color: '#128c7e', borderColor: '#25d36650', background: '#eafaf1' }}
+              >
+                <MessageCircle size={15} color="#25d366" /> Open WhatsApp Web
+              </Button>
+              <Button type="button" onClick={() => setDesktopPrompt(null)}>
+                Done
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      )}
 
       {/* ── ISOLATED PRINT PORTAL (Attached directly to document.body) ───── */}
       {typeof document !== 'undefined' && createPortal(
@@ -176,6 +332,9 @@ function InvoiceSheet({
   customerName,
   customerPhone,
   customerLocation,
+  primaryLocation,
+  extraLocations,
+  cleanNotes,
   currencyCode,
   subtotal,
   discount,
@@ -200,10 +359,10 @@ function InvoiceSheet({
             className="invoice-logo"
           />
           <div className="invoice-brand-text">
-            <h1 className="company-title">JM HOLLO BRICKS</h1>
+            <h1 className="company-title">JM BRICKS</h1>
             <p className="company-tagline">Quality Hollow Bricks & Cement Blocks Manufacturers</p>
             <div className="company-contacts">
-              <span><strong>Mobile:</strong> 9446663786 | 97407495127 | 1306147395</span>
+              <span><strong>Mobile:</strong> 9747495127 | 9446663786</span>
               {settings.business_address && (
                 <span> · {settings.business_address}</span>
               )}
@@ -236,6 +395,12 @@ function InvoiceSheet({
             <div className="info-detail-item">
               <Phone size={13} className="info-icon" />
               <span><strong>Phone:</strong> {customerPhone}</span>
+            </div>
+          )}
+          {extraLocations && extraLocations.length > 0 && (
+            <div className="info-detail-item" style={{ marginTop: '2px' }}>
+              <MapPin size={13} className="info-icon" color="#1a6640" />
+              <span><strong>Delivery Sites:</strong> {[primaryLocation || customerLocation, ...extraLocations.map(l => l.location)].filter(Boolean).join(', ')}</span>
             </div>
           )}
         </div>
@@ -277,38 +442,111 @@ function InvoiceSheet({
             </tr>
           </thead>
           <tbody>
-            {items && items.length > 0 ? (
-              items.map((item, index) => {
-                const prod = catalog?.products?.find(p => p.id === item.product_id);
-                const brickSizeLabel = prod?.size_label || (prod?.brick_size ? `${prod.brick_size} inch` : '') || item.product_name || item.description || 'Finished Brick';
-                const rate = Number(item.unit_price ?? item.unit_cost ?? 0);
-                const qty = Number(item.quantity || 0);
-                const amount = item.line_total != null ? Number(item.line_total) : qty * rate;
+            {extraLocations && extraLocations.length > 0 ? (
+              <>
+                {/* Location 1 (Primary) */}
+                <tr className="loc-group-header" style={{ background: '#f0f6f2' }}>
+                  <td colSpan={6} style={{ fontWeight: 700, color: '#1a6640', fontSize: '12px', padding: '6px 10px', letterSpacing: '0.3px' }}>
+                    📍 LOCATION 1: {(primaryLocation || customerLocation || 'Main Delivery Site').toUpperCase()}
+                  </td>
+                </tr>
+                {items && items.length > 0 ? (
+                  items.map((item, index) => {
+                    const prod = catalog?.products?.find(p => p.id === item.product_id);
+                    const brickSizeLabel = prod?.size_label || (prod?.brick_size ? `${prod.brick_size} inch` : '') || item.product_name || item.description || 'Finished Brick';
+                    const rate = Number(item.unit_price ?? item.unit_cost ?? 0);
+                    const qty = Number(item.quantity || 0);
+                    const amount = item.line_total != null ? Number(item.line_total) : qty * rate;
 
-                return (
-                  <tr key={item.id || index}>
-                    <td style={{ textAlign: 'center', color: '#687e70' }}>{index + 1}</td>
-                    <td>{formatDateDisplay(record.sale_date)}</td>
-                    <td>
-                      <strong className="item-title">{brickSizeLabel}</strong>
-                      {prod?.code && <small className="item-sub"> · Code: {prod.code}</small>}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                      {qty.toLocaleString('en-IN')} <span style={{ fontSize: '11px', color: '#687e70', fontWeight: 400 }}>nos</span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>{currency(rate, currencyCode)}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#132e1e' }}>
-                      {currency(amount, currencyCode)}
-                    </td>
-                  </tr>
-                );
-              })
+                    return (
+                      <tr key={item.id || index}>
+                        <td style={{ textAlign: 'center', color: '#687e70' }}>{index + 1}</td>
+                        <td>{formatDateDisplay(record.sale_date)}</td>
+                        <td>
+                          <strong className="item-title">{brickSizeLabel}</strong>
+                          {prod?.code && <small className="item-sub"> · Code: {prod.code}</small>}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                          {qty.toLocaleString('en-IN')} <span style={{ fontSize: '11px', color: '#687e70', fontWeight: 400 }}>nos</span>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>{currency(rate, currencyCode)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: '#132e1e' }}>
+                          {currency(amount, currencyCode)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : null}
+
+                {/* Additional Locations */}
+                {extraLocations.map((loc, lIdx) => {
+                  const prod = catalog?.products?.find(p => p.id === loc.product_id);
+                  const brickSizeLabel = prod?.size_label || (prod?.brick_size ? `${prod.brick_size} inch` : '') || 'Finished Brick';
+                  const rate = Number(loc.price || 0);
+                  const qty = Number(loc.quantity || 0);
+                  const amount = qty * rate;
+
+                  return (
+                    <React.Fragment key={loc.id || lIdx}>
+                      <tr className="loc-group-header" style={{ background: '#f0f6f2' }}>
+                        <td colSpan={6} style={{ fontWeight: 700, color: '#1a6640', fontSize: '12px', padding: '6px 10px', letterSpacing: '0.3px', borderTop: '1.5px solid #d5e5da' }}>
+                          📍 LOCATION {lIdx + 2}: {(loc.location || 'Site').toUpperCase()}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style={{ textAlign: 'center', color: '#687e70' }}>{(items?.length || 0) + lIdx + 1}</td>
+                        <td>{formatDateDisplay(record.sale_date)}</td>
+                        <td>
+                          <strong className="item-title">{brickSizeLabel}</strong>
+                          {prod?.code && <small className="item-sub"> · Code: {prod.code}</small>}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                          {qty.toLocaleString('en-IN')} <span style={{ fontSize: '11px', color: '#687e70', fontWeight: 400 }}>nos</span>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>{currency(rate, currencyCode)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: '#132e1e' }}>
+                          {currency(amount, currencyCode)}
+                        </td>
+                      </tr>
+                    </React.Fragment>
+                  );
+                })}
+              </>
             ) : (
-              <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: '16px', color: '#687e70' }}>
-                  No line items recorded
-                </td>
-              </tr>
+              // Baseline single location rendering
+              items && items.length > 0 ? (
+                items.map((item, index) => {
+                  const prod = catalog?.products?.find(p => p.id === item.product_id);
+                  const brickSizeLabel = prod?.size_label || (prod?.brick_size ? `${prod.brick_size} inch` : '') || item.product_name || item.description || 'Finished Brick';
+                  const rate = Number(item.unit_price ?? item.unit_cost ?? 0);
+                  const qty = Number(item.quantity || 0);
+                  const amount = item.line_total != null ? Number(item.line_total) : qty * rate;
+
+                  return (
+                    <tr key={item.id || index}>
+                      <td style={{ textAlign: 'center', color: '#687e70' }}>{index + 1}</td>
+                      <td>{formatDateDisplay(record.sale_date)}</td>
+                      <td>
+                        <strong className="item-title">{brickSizeLabel}</strong>
+                        {prod?.code && <small className="item-sub"> · Code: {prod.code}</small>}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                        {qty.toLocaleString('en-IN')} <span style={{ fontSize: '11px', color: '#687e70', fontWeight: 400 }}>nos</span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>{currency(rate, currencyCode)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#132e1e' }}>
+                        {currency(amount, currencyCode)}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '16px', color: '#687e70' }}>
+                    No line items recorded
+                  </td>
+                </tr>
+              )
             )}
           </tbody>
         </table>
@@ -323,10 +561,10 @@ function InvoiceSheet({
             <p className="amount-words-text">{numberToWordsINR(grandTotal)}</p>
           </div>
 
-          {record.notes && (
+          {cleanNotes && (
             <div className="invoice-notes-box">
               <span className="notes-title">Notes / Delivery Details:</span>
-              <p className="notes-content">{record.notes}</p>
+              <p className="notes-content">{cleanNotes}</p>
             </div>
           )}
 
@@ -390,7 +628,7 @@ function InvoiceSheet({
       <div className="invoice-footer">
         <div className="invoice-footer-left">
           <p className="footer-tagline">Thank you for your business!</p>
-          <p className="footer-company">JM HOLLO BRICKS – Quality You Can Trust</p>
+          <p className="footer-company">JM BRICKS – Quality You Can Trust</p>
           <p className="footer-terms">
             * Goods once sold will not be taken back. Subject to Malappuram jurisdiction.
           </p>
@@ -400,7 +638,7 @@ function InvoiceSheet({
           <div className="signature-box">
             <div className="signature-line" />
             <strong className="sign-title">Authorized Signatory</strong>
-            <small className="sign-company">For JM HOLLO BRICKS</small>
+            <small className="sign-company">For JM BRICKS</small>
           </div>
         </div>
       </div>

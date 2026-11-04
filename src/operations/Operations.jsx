@@ -1,9 +1,11 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {useLocation,useNavigate,Link} from 'react-router-dom';
-import {Plus,Search,RefreshCw,History,Package,Factory,Wallet,ShoppingBag,ShoppingCart,Printer,Trash2} from 'lucide-react';
+import {Plus,Search,RefreshCw,History,Package,Factory,Wallet,ShoppingBag,ShoppingCart,Printer,Trash2,Eye,Edit3,MessageCircle} from 'lucide-react';
 import {Button,Card,Badge,EmptyState,Field,SectionTitle,Table,Dialog,Brick,number} from '../components';
 import {supabase} from '../lib/supabase';
-import {catalog as loadCatalog,history,formats,detail,movements,currency,today,execute} from './api';
+import {catalog as loadCatalog,history,formats,detail,movements,currency,today,execute,updateSaleBill} from './api';
+import {parseDeliveryLocations,formatWhatsAppInvoiceMessage} from './locationHelpers';
+import {shareInvoiceViaWhatsApp,downloadBlob} from './pdfInvoiceGenerator.js';
 import OperationForm,{titles} from './OperationForm';
 import SalesInvoice from './SalesInvoice';
 import Reports,{LiveDashboard} from './Reports';
@@ -43,11 +45,78 @@ export default function Operations({profile,settings}) {
     }finally{lock.current=false;setBusy(false);}
   }
   async function submit(kind,payload){
+    if (kind === 'edit_sale') {
+      if (lock.current) return;
+      lock.current = true;
+      setBusy(true);
+      setSaveError('');
+      try {
+        const result = await updateSaleBill({
+          saleId: payload.saleId,
+          payload,
+          originalSale: payload.originalSale,
+          catalog,
+          currentUserId: profile.id
+        });
+        clearPending();
+        setModal(null);
+        setMessage(`Sales Bill #${result.receipt_number} updated successfully.`);
+        setRevision(v => v + 1);
+        setSelected({ kind: 'sales', id: result.id });
+      } catch (err) {
+        setSaveError(err.message || 'Unable to update sales bill.');
+      } finally {
+        lock.current = false;
+        setBusy(false);
+      }
+      return;
+    }
     if(lock.current||pending)return;
     const request={id:crypto.randomUUID(),kind,payload:{...payload,currency:settings.currency}};
     try{sessionStorage.setItem(storageKey,JSON.stringify(request));}
     catch{setSaveError('Allow session storage so interrupted submissions can be retried safely. Nothing has been sent.');return;}
     setPending(request);await send(request);
+  }
+  async function handleStartEditSale(saleId) {
+    if (busy) return;
+    setBusy(true);
+    setSaveError('');
+    try {
+      const saleData = await detail('sales', saleId);
+      if (!saleData || !saleData.record) throw new Error('Sale record could not be loaded.');
+
+      const { userNotes, primaryLocation, extraLocations } = parseDeliveryLocations(saleData.record.notes || '');
+
+      setModal({
+        kind: 'edit_sale',
+        initial: {
+          isEditMode: true,
+          saleId: saleData.record.id,
+          receiptNumber: saleData.record.receipt_number,
+          date: saleData.record.sale_date,
+          contact_id: saleData.record.customer_id,
+          customer_name: saleData.record.customer_name,
+          customer_phone: saleData.record.customer_phone,
+          customerLocation: primaryLocation || '',
+          deliveryLocation: primaryLocation || '',
+          extraLocations: extraLocations || [],
+          discount: saleData.record.discount != null ? String(saleData.record.discount) : '0',
+          paid: saleData.payments?.[0]?.amount != null ? String(saleData.payments[0].amount) : (saleData.record.amount_received != null ? String(saleData.record.amount_received) : '0'),
+          payment_method: saleData.payments?.[0]?.payment_method || 'cash',
+          notes: userNotes,
+          items: (saleData.items || []).map(i => ({
+            product_id: i.product_id,
+            quantity: String(i.quantity),
+            price: String(i.unit_price)
+          })),
+          originalSale: saleData
+        }
+      });
+    } catch (err) {
+      setSaveError(err.message || 'Unable to load sale details for editing.');
+    } finally {
+      setBusy(false);
+    }
   }
   async function checkPending(){
     if(lock.current)return;lock.current=true;setBusy(true);setSaveError('');
@@ -65,7 +134,7 @@ export default function Operations({profile,settings}) {
     {page==='dashboard'&&<><div className="quick-actions"><span>Quick actions</span>{[['sale',ShoppingBag],['purchase',ShoppingCart],['production',Factory],['expense',Wallet]].map(([kind,Icon])=><Button key={kind} disabled={!canWrite} onClick={()=>open(kind)}><Icon size={16}/>{titles[kind]}</Button>)}</div><ProductionOverview settings={settings} revision={revision}/><LiveDashboard settings={settings} revision={revision} onDetail={setSelected}/></>}
     {page==='stock'&&<StockPage catalog={catalog} settings={settings} owner={owner} open={open} onHistory={setStockHistory}/>}
     {(page==='production'||productionNew)&&<Production catalog={catalog} settings={settings} profile={profile} revision={revision} onChanged={()=>setRevision(v=>v+1)} openNew={productionNew} onOpened={()=>setProductionNew(false)}/>}
-    {formats[page]&&page!=='production'&&<HistoryPage key={page} kind={page} revision={revision} catalog={catalog} settings={settings} canWrite={canWrite} owner={owner} open={open} onDetail={id=>setSelected({kind:page,id})}/>}
+    {formats[page]&&page!=='production'&&<HistoryPage key={page} kind={page} revision={revision} catalog={catalog} settings={settings} canWrite={canWrite} owner={owner} open={open} onDetail={id=>setSelected({kind:page,id})} onEditSale={handleStartEditSale}/>}
     {page==='production'&&owner&&<Card><SectionTitle title="Product configuration" subtitle="Manage brick sizes and bricks per line. Product changes never add stock."/><Button onClick={()=>open('product')}>Configure a product</Button>{catalog.products.map(p=><div className="product-footer" key={p.id}><span>{p.code} · {p.name} · {p.default_quantity||'—'} bricks/line</span><Button variant="secondary" onClick={()=>open('product',p)}>Edit configuration</Button></div>)}<details><summary>Authorized stock corrections</summary><p>Verified opening balances and corrections require a reason and an owner account.</p>{catalog.products.filter(p=>p.is_stocked).map(p=><Button key={p.id} variant="secondary" onClick={()=>open('adjustment',{product_id:p.id})}>{p.code} · adjustment</Button>)}</details></Card>}{page==='reports'&&<Reports settings={settings} revision={revision} owner={owner}/>}
     {modal&&!pending&&<OperationForm key={`${modal.kind}-${modal.initial.id||''}`} {...modal} catalog={catalog} settings={settings} busy={busy} error={saveError} onSubmit={submit} onClose={()=>setModal(null)} onCustomerUpdate={cust => {
       if (cust) {
@@ -77,7 +146,7 @@ export default function Operations({profile,settings}) {
       }
     }}/>}
     {pending&&<Dialog title="Submission status" onClose={clearPending}><p>{busy?'Saving your entry…':'This entry needs confirmation. Keep its request ID and retry the original submission if the connection was interrupted.'}</p><div className="notice">{titles[pending.kind]}<br/>Request: {pending.id}</div>{saveError&&<div className="auth-error" role="alert">{saveError}</div>}<div className="dialog-actions"><Button variant="secondary" onClick={clearPending}>Dismiss</Button><Button variant="secondary" disabled={busy} onClick={checkPending}>Check saved status</Button><Button disabled={busy} onClick={()=>send(pending)}>{busy?'Please wait…':'Retry original entry'}</Button></div></Dialog>}
-    {selected&&!modal&&!pending&&<TransactionDetail key={`${selected.kind}-${selected.id}-${revision}`} {...selected} catalog={catalog} settings={settings} canWrite={canWrite} owner={owner} onClose={()=>setSelected(null)} onPayment={open}/>}
+    {selected&&!modal&&!pending&&<TransactionDetail key={`${selected.kind}-${selected.id}-${revision}`} {...selected} catalog={catalog} settings={settings} canWrite={canWrite} owner={owner} onClose={()=>setSelected(null)} onPayment={open} onEditSale={handleStartEditSale}/>}
     {stockHistory&&!modal&&!pending&&<MovementHistory product={stockHistory} onClose={()=>setStockHistory(null)}/>}
   </>;
 }
@@ -207,7 +276,23 @@ function StockPage({catalog,settings,owner,open,onHistory}){
    </div>
  );
 }
-function HistoryPage({kind,revision,catalog,settings,canWrite,owner,open,onDetail}){
+export function formatPurchaseUnit(unit, quantity) {
+  if (!unit) return '';
+  const u = String(unit).trim().toLowerCase();
+  const num = Number(quantity);
+  const isPlural = !isNaN(num) && num !== 1;
+
+  if (u === 'bag' || u === 'bags') return isPlural ? 'Bags' : 'Bag';
+  if (u === 'load' || u === 'loads') return isPlural ? 'Loads' : 'Load';
+  if (u === 'tonne' || u === 'ton' || u === 'tons') return isPlural ? 'Tons' : 'Ton';
+  if (u === 'kg' || u === 'kgs') return 'Kg';
+  if (u === 'litre' || u === 'liter' || u === 'litres' || u === 'liters') return isPlural ? 'Liters' : 'Liter';
+  if (u === 'piece' || u === 'pieces' || u === 'nos' || u === 'no') return isPlural ? 'Nos' : 'No';
+  if (u === 'brick' || u === 'bricks') return isPlural ? 'Bricks' : 'Brick';
+  return u.charAt(0).toUpperCase() + u.slice(1);
+}
+
+function HistoryPage({kind,revision,catalog,settings,canWrite,owner,open,onDetail,onEditSale}){
  const [filters,setFilters]=useState({search:'',from:'',to:'',category:'',status:'active'}),[page,setPage]=useState(0),[result,setResult]=useState({rows:[],count:0}),[loading,setLoading]=useState(true),[error,setError]=useState('');
  const [purchaseItemsMap,setPurchaseItemsMap]=useState({});
  const change=(key,value)=>{setFilters(f=>({...f,[key]:value}));setPage(0)};
@@ -217,24 +302,49 @@ function HistoryPage({kind,revision,catalog,settings,canWrite,owner,open,onDetai
    if(kind!=='purchases'||!result.rows.length){setPurchaseItemsMap({});return;}
    let alive=true;
    const ids=result.rows.map(r=>r.id);
-   supabase.from('purchase_items').select('purchase_id,product_name,quantity,unit,description').in('purchase_id',ids).then(({data,error})=>{
-     if(alive&&data&&!error){
-       const map={};
-       data.forEach(it=>{
-         if(!map[it.purchase_id])map[it.purchase_id]=[];
-         map[it.purchase_id].push(it);
-       });
-       setPurchaseItemsMap(map);
-     }
-   });
+   supabase
+     .from('purchase_items')
+     .select('purchase_id,product_id,description,quantity,unit,product_code,products(id,name,unit)')
+     .in('purchase_id',ids)
+     .then(({data,error})=>{
+       if(error){
+         return supabase
+           .from('purchase_items')
+           .select('purchase_id,product_id,description,quantity,unit,product_code')
+           .in('purchase_id',ids);
+       }
+       return {data, error: null};
+     })
+     .then(({data,error})=>{
+       if(alive&&data&&!error){
+         const map={};
+         data.forEach(it=>{
+           if(!map[it.purchase_id])map[it.purchase_id]=[];
+           map[it.purchase_id].push(it);
+         });
+         setPurchaseItemsMap(map);
+       }
+     })
+     .catch(()=>{});
    return()=>{alive=false};
  },[kind,result.rows]);
 
  function getPurchaseSummary(r){
    const items=purchaseItemsMap[r.id]||[];
-   if(!items.length)return{material:'Raw Material',quantity:'—'};
-   const material=items.map(i=>i.product_name||i.description||'Raw Material').join(', ');
-   const quantity=items.map(i=>`${i.quantity}${i.unit?` ${i.unit}`:''}`).join(', ');
+   if(!items.length)return{material:'—',quantity:'—'};
+   const material=items
+     .map(i=>i.products?.name || catalog?.products?.find(p=>p.id===i.product_id)?.name || i.description || i.product_code || '')
+     .filter(Boolean)
+     .join(', ') || '—';
+   const quantity=items
+     .map(i=>{
+       if(i.quantity==null || i.quantity==='') return '—';
+       const u = i.unit || i.products?.unit || catalog?.products?.find(p=>p.id===i.product_id)?.unit || '';
+       const unitLabel = formatPurchaseUnit(u, i.quantity);
+       return unitLabel ? `${i.quantity} ${unitLabel}` : `${i.quantity}`;
+     })
+     .filter(Boolean)
+     .join(', ') || '—';
    return{material,quantity};
  }
 
@@ -259,7 +369,31 @@ function HistoryPage({kind,revision,catalog,settings,canWrite,owner,open,onDetai
  if(['sales','purchases'].includes(kind))cols.push({key:'outstanding_balance',label:'Outstanding',render:r=><Badge tone={Number(r.outstanding_balance)>0?'amber':'green'}>{currency(r.outstanding_balance,r.currency)}</Badge>});
  if(kind==='expenses')cols.push({key:'category_name',label:'Category'});
  cols.push({key:'status',label:'Status',render:r=><Badge tone={r.deleted_at?'neutral':'green'}>{r.deleted_at?'Deleted':'Active'}</Badge>});
- if(owner)cols.push({key:'delete',label:'Action',render:r=>!r.deleted_at&&<Button variant="secondary" className="delete-action" onClick={()=>open(`delete_${f.operation}`,{transaction_id:r.id})}><Trash2 size={14}/>Delete</Button>});
+ if(kind==='sales'){
+  cols.push({
+    key:'actions',
+    label:'Actions',
+    render:r=>!r.deleted_at&&(
+      <div style={{display:'inline-flex',gap:'6px',alignItems:'center'}} onClick={e=>e.stopPropagation()}>
+        <Button variant="secondary" title="View Bill" onClick={()=>onDetail(r.id)}>
+          <Eye size={14}/>View
+        </Button>
+        {canWrite&&(
+          <Button variant="secondary" title="Edit Bill" onClick={()=>onEditSale?.(r.id)}>
+            <Edit3 size={14}/>Edit
+          </Button>
+        )}
+        {owner&&(
+          <Button variant="secondary" className="delete-action" title="Delete Bill" onClick={()=>open(`delete_${f.operation}`,{transaction_id:r.id})}>
+            <Trash2 size={14}/>Delete
+          </Button>
+        )}
+      </div>
+    )
+  });
+ }else if(owner){
+  cols.push({key:'delete',label:'Action',render:r=>!r.deleted_at&&<Button variant="secondary" className="delete-action" onClick={()=>open(`delete_${f.operation}`,{transaction_id:r.id})}><Trash2 size={14}/>Delete</Button>});
+ }
 
  return (
    <>
@@ -340,9 +474,11 @@ function HistoryPage({kind,revision,catalog,settings,canWrite,owner,open,onDetai
  );
 }
 function Pagination({page,count,setPage}){return <div className="pagination"><Button variant="secondary" disabled={!page} onClick={()=>setPage(p=>p-1)}>Previous</Button><span>Page {page+1} of {Math.max(1,Math.ceil(count/25))}</span><Button variant="secondary" disabled={(page+1)*25>=count} onClick={()=>setPage(p=>p+1)}>Next</Button></div>}
-function TransactionDetail({kind,id,catalog,settings,canWrite,owner,onClose,onPayment}){
+function TransactionDetail({kind,id,catalog,settings,canWrite,owner,onClose,onPayment,onEditSale}){
  const [data,setData]=useState(null),[error,setError]=useState('');
  const [previousBalance,setPreviousBalance]=useState(0);
+ const [pdfBusy,setPdfBusy]=useState(false);
+ const [desktopPrompt,setDesktopPrompt]=useState(null);
  useEffect(()=>{
   let alive=true;
   detail(kind,id).then(v=>{
@@ -397,6 +533,61 @@ function TransactionDetail({kind,id,catalog,settings,canWrite,owner,onClose,onPa
                 <Trash2 size={16}/> Delete Sale
               </Button>
             )}
+            {canWrite && !data.record.deleted_at && (
+              <Button variant="secondary" onClick={()=>{ onClose(); onEditSale?.(id); }}>
+                <Edit3 size={16}/> Edit Bill
+              </Button>
+            )}
+            {data && !data.record.deleted_at && (
+              <Button
+                variant="secondary"
+                disabled={pdfBusy}
+                onClick={async () => {
+                  setPdfBusy(true);
+                  try {
+                    const { userNotes, primaryLocation, extraLocations } = parseDeliveryLocations(data.record.notes || '');
+                    await shareInvoiceViaWhatsApp({
+                      record: data.record,
+                      items: data.items,
+                      payments: data.payments,
+                      customerName: data.record.customer_name,
+                      customerPhone: data.record.customer_phone,
+                      customerLocation: data.record.customer_location,
+                      primaryLocation,
+                      extraLocations,
+                      cleanNotes: userNotes,
+                      subtotal: data.record.subtotal,
+                      discount: data.record.discount,
+                      grandTotal: data.record.total,
+                      amountPaid: data.record.amount_received,
+                      outstanding: data.record.outstanding_balance,
+                      catalog,
+                      settings
+                    }, (prompt) => setDesktopPrompt(prompt));
+                  } catch (err) {
+                    console.error('WhatsApp PDF share error:', err);
+                    const { shareUrl } = formatWhatsAppInvoiceMessage({
+                      record: data.record,
+                      items: data.items,
+                      customerName: data.record.customer_name,
+                      customerPhone: data.record.customer_phone,
+                      subtotal: data.record.subtotal,
+                      discount: data.record.discount,
+                      grandTotal: data.record.total,
+                      amountPaid: data.record.amount_received,
+                      outstanding: data.record.outstanding_balance,
+                      catalog
+                    });
+                    window.open(shareUrl, '_blank', 'noopener,noreferrer');
+                  } finally {
+                    setPdfBusy(false);
+                  }
+                }}
+                style={{ color: '#128c7e', borderColor: '#25d36650', background: '#eafaf1' }}
+              >
+                <MessageCircle size={16} color="#25d366" /> {pdfBusy ? 'Generating PDF…' : 'WhatsApp'}
+              </Button>
+            )}
             {canWrite && !data.record.deleted_at && Number(data.record.outstanding_balance) > 0 && (
               <Button onClick={()=>onPayment('customer_payment',{transaction_id:id,outstanding:data.record.outstanding_balance})}>
                 Receive payment
@@ -406,13 +597,59 @@ function TransactionDetail({kind,id,catalog,settings,canWrite,owner,onClose,onPa
               Close
             </Button>
           </div>
+          {desktopPrompt && (
+            <Dialog title="Share Invoice on WhatsApp" onClose={() => setDesktopPrompt(null)}>
+              <div style={{ padding: '4px 0' }}>
+                <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                  <div style={{ fontSize: '38px', marginBottom: '8px' }}>📄</div>
+                  <h3 style={{ margin: '0 0 6px', color: '#132e1e', fontSize: '17px' }}>
+                    {desktopPrompt.fileName} Downloaded
+                  </h3>
+                  <p style={{ margin: 0, color: '#687e70', fontSize: '13px' }}>
+                    The official PDF invoice has been downloaded to your computer.
+                  </p>
+                </div>
+                <div style={{ background: '#f4f9f5', border: '1px solid #d5e5da', borderRadius: '8px', padding: '14px', marginBottom: '18px', fontSize: '13px' }}>
+                  <p style={{ margin: '0 0 6px', fontWeight: 700, color: '#1a6640', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <MessageCircle size={16} color="#25d366" /> WhatsApp Web is opening for:
+                  </p>
+                  <p style={{ margin: '0 0 6px', color: '#132e1e' }}>
+                    <strong>Customer:</strong> {desktopPrompt.customerName} {desktopPrompt.customerPhone ? `(${desktopPrompt.customerPhone})` : ''}
+                  </p>
+                  <p style={{ margin: 0, color: '#354d3e', fontSize: '12.5px', lineHeight: 1.5 }}>
+                    👉 In the opened WhatsApp Web tab, click the <strong>attach (📎)</strong> icon, choose <strong>Document</strong>, and select <strong>{desktopPrompt.fileName}</strong> to send.
+                  </p>
+                </div>
+                <div className="dialog-actions">
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    onClick={() => downloadBlob(desktopPrompt.pdfBlob, desktopPrompt.fileName)}
+                  >
+                    Download PDF Again
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    onClick={() => window.open(desktopPrompt.waUrl, '_blank', 'noopener,noreferrer')}
+                    style={{ color: '#128c7e', borderColor: '#25d36650', background: '#eafaf1' }}
+                  >
+                    <MessageCircle size={15} color="#25d366" /> Open WhatsApp Web
+                  </Button>
+                  <Button type="button" onClick={() => setDesktopPrompt(null)}>
+                    Done
+                  </Button>
+                </div>
+              </div>
+            </Dialog>
+          )}
         </>
       )}
     </Dialog>
   );
  }
 
- return <Dialog title={`${formats[kind].title} details`} onClose={onClose}>{error?<p className="auth-error" role="alert">{error}</p>:!data?<p role="status">Loading transaction…</p>:<>{data.record.deleted_at&&<div className="notice"><strong>Deleted entry · excluded from active reports</strong><p>{data.record.deletion_reason}</p><small>{new Date(data.record.deleted_at).toLocaleString('en-IN')}</small></div>}<div className="receipt"><div className="receipt-head"><h2>{settings.business_name}</h2><p>{kind==='purchases'?`Purchase P-${data.record.reference_number}`:formats[kind].title}</p><p>{data.record[formats[kind].date]}</p></div><h3>{data.record[formats[kind].search]}</h3>{(data.record.customer_phone||data.record.supplier_phone)&&<p>{data.record.customer_phone||data.record.supplier_phone}</p>}{(data.record.customer_location||catalog?.customers?.find(c=>c.id===data.record.customer_id||c.name===data.record.customer_name)?.location)&&<p style={{color:'#1a6640',fontWeight:600}}>📍 {data.record.customer_location||catalog?.customers?.find(c=>c.id===data.record.customer_id||c.name===data.record.customer_name)?.location}</p>}{data.items.length>0&&<Table rows={data.items} columns={[{key:'name',label:'Product',render:r=>`${r.product_name||r.description}${r.product_code?` · ${r.product_code}`:''}`},{key:'quantity',label:'Quantity'},{key:'unit',label:'Unit price',render:r=>currency(r.unit_price??r.unit_cost,data.record.currency)},{key:'line_total',label:'Total',render:r=>currency(r.line_total,data.record.currency)}]}/ >}{kind==='production'?<dl className="review-list"><dt>Produced</dt><dd>{data.record.quantity_produced}</dd><dt>Rejected</dt><dd>{data.record.rejected_quantity}</dd><dt>Net bricks</dt><dd>{data.record.net_quantity}</dd><dt>Cost / good brick</dt><dd>{data.record.unit_cost===null?'Unknown':currency(data.record.unit_cost,settings.currency)}</dd></dl>:<dl className="review-list"><dt>Total</dt><dd>{currency(data.record.total??data.record.amount,data.record.currency)}</dd>{kind!=='expenses'&&<><dt>Paid</dt><dd>{currency(data.record.amount_received??data.record.amount_paid,data.record.currency)}</dd><dt>Outstanding</dt><dd>{currency(data.record.outstanding_balance,data.record.currency)}</dd></>}</dl>}{data.payments.length>0&&<><h3>Payments recorded</h3><Table rows={data.payments} columns={[{key:'payment_date',label:'Date'},{key:'payment_method',label:'Method'},{key:'amount',label:'Amount',render:r=>currency(r.amount,data.record.currency)}]}/></>}{data.record.notes&&<p className="receipt-notes">{data.record.notes}</p>}<p className="receipt-id">Record: {id}</p></div><div className="dialog-actions no-print">{owner&&!data.record.deleted_at&&['purchases','expenses'].includes(kind)&&<Button variant="secondary" className="delete-action" onClick={()=>onPayment(`delete_${formats[kind].operation}`,{transaction_id:id})}><Trash2 size={16}/>Delete</Button>}{['purchases'].includes(kind)&&canWrite&&!data.record.deleted_at&&Number(data.record.outstanding_balance)>0&&<Button onClick={()=>onPayment('supplier_payment',{transaction_id:id,outstanding:data.record.outstanding_balance})}>Pay supplier</Button>}</div></>}</Dialog>;
+ return <Dialog title={`${formats[kind].title} details`} onClose={onClose}>{error?<p className="auth-error" role="alert">{error}</p>:!data?<p role="status">Loading transaction…</p>:<>{data.record.deleted_at&&<div className="notice"><strong>Deleted entry · excluded from active reports</strong><p>{data.record.deletion_reason}</p><small>{new Date(data.record.deleted_at).toLocaleString('en-IN')}</small></div>}<div className="receipt"><div className="receipt-head"><h2>{settings.business_name}</h2><p>{kind==='purchases'?`Purchase P-${data.record.reference_number}`:formats[kind].title}</p><p>{data.record[formats[kind].date]}</p></div><h3>{data.record[formats[kind].search]}</h3>{(data.record.customer_phone||data.record.supplier_phone)&&<p>{data.record.customer_phone||data.record.supplier_phone}</p>}{(data.record.customer_location||catalog?.customers?.find(c=>c.id===data.record.customer_id||c.name===data.record.customer_name)?.location)&&<p style={{color:'#1a6640',fontWeight:600}}>📍 {data.record.customer_location||catalog?.customers?.find(c=>c.id===data.record.customer_id||c.name===data.record.customer_name)?.location}</p>}{data.items.length>0&&<Table rows={data.items} columns={[{key:'name',label:kind==='purchases'?'Raw Material':'Product',render:r=>`${r.description||r.product_name||r.products?.name||(kind==='purchases'?'Raw Material':'Product')}${r.product_code?` · ${r.product_code}`:''}`},{key:'quantity',label:'Quantity',render:r=>r.quantity!=null?`${r.quantity}${r.unit?` ${formatPurchaseUnit(r.unit,r.quantity)}`:''}`:'—'},{key:'unit',label:'Unit price',render:r=>currency(r.unit_price??r.unit_cost,data.record.currency)},{key:'line_total',label:'Total',render:r=>currency(r.line_total,data.record.currency)}]}/>}{kind==='production'?<dl className="review-list"><dt>Produced</dt><dd>{data.record.quantity_produced}</dd><dt>Rejected</dt><dd>{data.record.rejected_quantity}</dd><dt>Net bricks</dt><dd>{data.record.net_quantity}</dd><dt>Cost / good brick</dt><dd>{data.record.unit_cost===null?'Unknown':currency(data.record.unit_cost,settings.currency)}</dd></dl>:<dl className="review-list"><dt>Total</dt><dd>{currency(data.record.total??data.record.amount,data.record.currency)}</dd>{kind!=='expenses'&&<><dt>Paid</dt><dd>{currency(data.record.amount_received??data.record.amount_paid,data.record.currency)}</dd><dt>Outstanding</dt><dd>{currency(data.record.outstanding_balance,data.record.currency)}</dd></>}</dl>}{data.payments.length>0&&<><h3>Payments recorded</h3><Table rows={data.payments} columns={[{key:'payment_date',label:'Date'},{key:'payment_method',label:'Method'},{key:'amount',label:'Amount',render:r=>currency(r.amount,data.record.currency)}]}/></>}{data.record.notes&&<p className="receipt-notes">{data.record.notes}</p>}<p className="receipt-id">Record: {id}</p></div><div className="dialog-actions no-print">{owner&&!data.record.deleted_at&&['purchases','expenses'].includes(kind)&&<Button variant="secondary" className="delete-action" onClick={()=>onPayment(`delete_${formats[kind].operation}`,{transaction_id:id})}><Trash2 size={16}/>Delete</Button>}{['purchases'].includes(kind)&&canWrite&&!data.record.deleted_at&&Number(data.record.outstanding_balance)>0&&<Button onClick={()=>onPayment('supplier_payment',{transaction_id:id,outstanding:data.record.outstanding_balance})}>Pay supplier</Button>}</div></>}</Dialog>;
 }
 function MovementHistory({product,onClose}){
  const [page,setPage]=useState(0),[result,setResult]=useState({rows:[],count:0}),[loading,setLoading]=useState(true),[error,setError]=useState('');

@@ -4,6 +4,7 @@ import { Button, Field, Dialog, Badge } from '../components';
 import { today, currency } from './api';
 import { totals } from './calculations';
 import { supabase } from '../lib/supabase';
+import { formatSaleNotesWithLocations, parseDeliveryLocations } from './locationHelpers';
 
 const paymentMethods = [
   ['cash', 'Cash'],
@@ -110,8 +111,19 @@ export default function SaleForm({
   }, []);
 
   // Form State
+  const isEditMode = Boolean(initial?.isEditMode);
   const [date, setDate] = useState(() => initial.date || today(settings.timezone));
-  const [selectedCustomerId, setSelectedCustomerId] = useState(() => initial.contact_id || '');
+  const [selectedCustomerId, setSelectedCustomerId] = useState(() => {
+    if (initial.contact_id) return initial.contact_id;
+    if (initial.customer_id) return initial.customer_id;
+    if (initial.customer_name || initial.customerName) {
+      const match = (catalog.customers || []).find(
+        c => (c.name || '').toLowerCase() === (initial.customer_name || initial.customerName).toLowerCase()
+      );
+      if (match) return match.id;
+    }
+    return '';
+  });
   
   // Customer Search & Picker state
   const [customerSearch, setCustomerSearch] = useState('');
@@ -166,10 +178,6 @@ export default function SaleForm({
   const [paymentMethod, setPaymentMethod] = useState(() => initial.payment_method || 'cash');
   const [notes, setNotes] = useState(() => initial.notes || '');
 
-  // Review & errors
-  const [review, setReview] = useState(null);
-  const [localError, setLocalError] = useState('');
-
   // Currently selected customer object
   const selectedCustomer = useMemo(() => {
     return customerList.find(c => c.id === selectedCustomerId) || null;
@@ -196,10 +204,85 @@ export default function SaleForm({
     return customerList.find(c => c.phone && c.phone.trim() === p);
   }, [customerList, newCustomerPhone]);
 
+  // Review & errors
+  const [review, setReview] = useState(null);
+  const [localError, setLocalError] = useState('');
+
+  // Delivery Locations (Optional for baseline sale; multiple locations expandable in edit/multi-site)
+  const [deliveryLocation, setDeliveryLocation] = useState(() => initial.deliveryLocation || initial.customerLocation || '');
+  const [extraLocations, setExtraLocations] = useState(() => {
+    if (initial.extraLocations && Array.isArray(initial.extraLocations)) {
+      return initial.extraLocations.map(loc => ({
+        id: loc.id || crypto.randomUUID(),
+        location: loc.location || '',
+        product_id: loc.product_id || '',
+        quantity: loc.quantity != null ? String(loc.quantity) : '',
+        price: loc.price != null ? String(loc.price) : ''
+      }));
+    }
+    return [];
+  });
+
+  // When customer changes, if no custom delivery location entered yet, default to customer's place
+  useEffect(() => {
+    if (selectedCustomer && !deliveryLocation) {
+      const loc = selectedCustomer.location || selectedCustomer.place || selectedCustomer.address || '';
+      if (loc) setDeliveryLocation(loc);
+    }
+  }, [selectedCustomer]);
+
+  function handleAddLocation() {
+    const firstBrick = availableBricks[0];
+    setExtraLocations(prev => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        location: '',
+        product_id: firstBrick?.id || '',
+        quantity: '',
+        price: firstBrick ? String(firstBrick.selling_price || '0') : ''
+      }
+    ]);
+  }
+
+  function handleRemoveLocation(index) {
+    setExtraLocations(prev => prev.filter((_, i) => i !== index));
+  }
+
+  function updateExtraLocation(index, key, val) {
+    setExtraLocations(prev => prev.map((loc, i) => {
+      if (i !== index) return loc;
+      const updated = { ...loc, [key]: val };
+      if (key === 'product_id') {
+        const prod = availableBricks.find(p => p.id === val);
+        if (prod && !loc.price) {
+          updated.price = String(prod.selling_price || '0');
+        }
+      }
+      return updated;
+    }));
+  }
+
+  // Combined items for calculation and total verification
+  const allFormItems = useMemo(() => {
+    const list = [...items];
+    extraLocations.forEach(loc => {
+      if (loc.product_id && (Number(loc.quantity) > 0 || loc.quantity === '')) {
+        list.push({
+          product_id: loc.product_id,
+          quantity: loc.quantity,
+          price: loc.price,
+          _location: loc.location
+        });
+      }
+    });
+    return list;
+  }, [items, extraLocations]);
+
   // Calculations
   const summary = useMemo(() => {
-    return totals(items, discount || '0', amountPaid || '0');
-  }, [items, discount, amountPaid]);
+    return totals(allFormItems, discount || '0', amountPaid || '0');
+  }, [allFormItems, discount, amountPaid]);
 
   // Item helpers
   function updateItem(index, key, val) {
@@ -610,6 +693,27 @@ export default function SaleForm({
       return;
     }
 
+    // Validate extra delivery locations
+    for (let i = 0; i < extraLocations.length; i++) {
+      const loc = extraLocations[i];
+      if (!loc.location || !loc.location.trim()) {
+        setLocalError(`Please enter a delivery location name for Location #${i + 2}.`);
+        return;
+      }
+      if (!loc.product_id) {
+        setLocalError(`Please choose a brick size for Location #${i + 2} (${loc.location}).`);
+        return;
+      }
+      if (!loc.quantity || Number(loc.quantity) <= 0) {
+        setLocalError(`Please enter a valid brick quantity for Location #${i + 2} (${loc.location}).`);
+        return;
+      }
+      if (loc.price === '' || Number(loc.price) < 0) {
+        setLocalError(`Please enter a valid rate for Location #${i + 2} (${loc.location}).`);
+        return;
+      }
+    }
+
     if (!summary || !summary.valid) {
       setLocalError('Check quantities, prices, discount and payment. Payment cannot exceed total amount.');
       return;
@@ -622,7 +726,9 @@ export default function SaleForm({
       customerName: selectedCustomer?.name || 'Selected Customer',
       customerPhone: selectedCustomer?.phone || '',
       customerLocation: selectedCustomer?.location || selectedCustomer?.place || selectedCustomer?.address || '',
+      deliveryLocation: deliveryLocation.trim() || selectedCustomer?.location || selectedCustomer?.place || selectedCustomer?.address || '',
       items,
+      extraLocations,
       discount: discount || '0',
       paid: amountPaid || '0',
       total: summary.total,
@@ -636,33 +742,58 @@ export default function SaleForm({
   function handleConfirm() {
     if (busy) return;
     const isNew = selectedCustomer?.isPendingNew || !review.contact_id || String(review.contact_id).startsWith('pending-');
-    const combinedNotes = [
+    const combinedNotes = formatSaleNotesWithLocations(
       review.notes,
-      review.customerLocation ? `📍 Location: ${review.customerLocation}` : ''
-    ].filter(Boolean).join(' · ');
+      review.deliveryLocation || review.customerLocation,
+      review.extraLocations,
+      availableBricks
+    );
+
+    // Merge line items by product_id for database storage & stock movements
+    const aggregatedMap = {};
+    [...review.items, ...(review.extraLocations || [])].forEach(it => {
+      if (!it.product_id || Number(it.quantity) <= 0) return;
+      if (!aggregatedMap[it.product_id]) {
+        aggregatedMap[it.product_id] = {
+          product_id: it.product_id,
+          quantity: 0,
+          price: it.price
+        };
+      }
+      aggregatedMap[it.product_id].quantity += Number(it.quantity);
+    });
+
+    const dbItems = Object.values(aggregatedMap).map(it => ({
+      product_id: it.product_id,
+      quantity: String(it.quantity),
+      price: String(it.price)
+    }));
 
     const payload = {
       date: review.date,
       contact_id: isNew ? '' : review.contact_id,
-      name: isNew ? review.customerName : '',
-      phone: isNew ? review.customerPhone : '',
-      items: review.items,
+      name: isNew ? review.customerName : (selectedCustomer?.name || review.customerName),
+      phone: isNew ? review.customerPhone : (selectedCustomer?.phone || review.customerPhone || ''),
+      items: dbItems.length > 0 ? dbItems : review.items,
       discount: review.discount,
       paid: review.paid,
       payment_method: review.payment_method,
-      notes: combinedNotes
+      notes: combinedNotes,
+      ...(isEditMode ? { saleId: initial.saleId, originalSale: initial.originalSale } : {})
     };
-    onSubmit('sale', payload);
+    onSubmit(isEditMode ? 'edit_sale' : 'sale', payload);
   }
 
   // ── Confirmation Dialog ───────────────────────────────────────────────────
   if (review) {
     return (
-      <Dialog title="Confirm Sale Receipt" onClose={busy ? () => {} : () => setReview(null)}>
-        <div className="notice" style={{ background: '#eaf4ee', borderColor: '#b8dabf', color: '#164a2c' }}>
-          <strong>📋 Customer Order Confirmation</strong>
+      <Dialog title={isEditMode ? `Confirm Update to Bill #${initial.receiptNumber}` : 'Confirm Sale Receipt'} onClose={busy ? () => {} : () => setReview(null)}>
+        <div className="notice" style={{ background: isEditMode ? '#fef7ed' : '#eaf4ee', borderColor: isEditMode ? '#fed7aa' : '#b8dabf', color: isEditMode ? '#9a3412' : '#164a2c' }}>
+          <strong>{isEditMode ? `✏️ Update Sales Bill #${initial.receiptNumber}` : '📋 Customer Order Confirmation'}</strong>
           <p style={{ margin: '4px 0 0', fontSize: '13px' }}>
-            Saving this sale will deduct bricks from stock, create a receipt, and update customer balance records.
+            {isEditMode
+              ? 'Saving will update this bill in the database, adjust customer balances, and safely update inventory stock movements.'
+              : 'Saving this sale will deduct bricks from stock, create a receipt, and update customer balance records.'}
           </p>
         </div>
 
@@ -677,13 +808,33 @@ export default function SaleForm({
             {review.customerLocation && <span style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#1a6640' }}>📍 {review.customerLocation}</span>}
           </dd>
 
-          <dt>Items ({review.items.length})</dt>
+          <dt>Delivery & Items</dt>
           <dd>
+            {review.deliveryLocation && (
+              <div style={{ fontWeight: 700, color: '#1a6640', marginBottom: '4px' }}>
+                📍 Location 1: {review.deliveryLocation}
+              </div>
+            )}
             {review.items.map((it, idx) => {
               const p = availableBricks.find(b => b.id === it.product_id);
               return (
-                <div key={idx} style={{ fontSize: '14px', marginBottom: '4px' }}>
+                <div key={idx} style={{ fontSize: '14px', marginBottom: '4px', paddingLeft: review.deliveryLocation ? '10px' : '0' }}>
                   <strong>{it.quantity} bricks</strong> of {p?.name || 'Brick'} @ {currency(it.price, settings.currency)}
+                </div>
+              );
+            })}
+
+            {review.extraLocations && review.extraLocations.length > 0 && review.extraLocations.map((loc, idx) => {
+              const p = availableBricks.find(b => b.id === loc.product_id);
+              const locTotal = (Number(loc.quantity) || 0) * (Number(loc.price) || 0);
+              return (
+                <div key={loc.id || idx} style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #d5e6d9' }}>
+                  <div style={{ fontWeight: 700, color: '#1a6640', marginBottom: '2px' }}>
+                    📍 Location #{idx + 2}: {loc.location}
+                  </div>
+                  <div style={{ fontSize: '14px', paddingLeft: '10px' }}>
+                    <strong>{loc.quantity} bricks</strong> of {p?.name || 'Brick'} @ {currency(loc.price, settings.currency)} = <strong>{currency(locTotal, settings.currency)}</strong>
+                  </div>
                 </div>
               );
             })}
@@ -729,7 +880,7 @@ export default function SaleForm({
             Back to Edit
           </Button>
           <Button disabled={busy} onClick={handleConfirm}>
-            {busy ? 'Saving sale…' : 'Confirm & Save Sale'}
+            {busy ? (isEditMode ? 'Updating bill…' : 'Saving sale…') : (isEditMode ? 'Update Bill' : 'Confirm & Save Sale')}
           </Button>
         </div>
       </Dialog>
@@ -739,11 +890,11 @@ export default function SaleForm({
   // ── Main New Sale Form ────────────────────────────────────────────────────
   return (
     <>
-      <Dialog title="New Sale" onClose={onClose}>
+      <Dialog title={isEditMode ? `Edit Sales Bill #${initial.receiptNumber}` : 'New Sale'} onClose={onClose}>
         <form onSubmit={handleReview}>
-          <div className="sale-top-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', background: '#f5f9f6', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #dce8de' }}>
-            <span style={{ fontSize: '13px', fontWeight: 700, color: '#1a6640', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              📄 SALES INVOICE ENTRY
+          <div className="sale-top-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', background: isEditMode ? '#fef9f0' : '#f5f9f6', padding: '10px 14px', borderRadius: '10px', border: isEditMode ? '1.5px solid #ebd5b3' : '1.5px solid #dce8de' }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: isEditMode ? '#b54708' : '#1a6640', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {isEditMode ? `✏️ EDIT SALES BILL #${initial.receiptNumber}` : '📄 SALES INVOICE ENTRY'}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '12px', fontWeight: 600, color: '#4a6252' }}>Sale Date:</span>
@@ -1096,6 +1247,19 @@ export default function SaleForm({
             )}
           </div>
 
+          {/* ── OPTIONAL DELIVERY LOCATION ────────────────────────────────────── */}
+          <div style={{ margin: '14px 0 16px' }}>
+            <Field label="Delivery Location (Optional)">
+              <input
+                type="text"
+                placeholder={selectedCustomer?.location ? `Defaults to: ${selectedCustomer.location}` : "e.g. Site 1, Kunnumpuram (defaults to customer place)"}
+                value={deliveryLocation}
+                onChange={e => setDeliveryLocation(e.target.value)}
+                style={{ minHeight: '40px', fontSize: '14px' }}
+              />
+            </Field>
+          </div>
+
           {/* ── FINISHED BRICKS SELECTION ─────────────────────────────────────── */}
           <div style={{ margin: '18px 0 10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -1195,6 +1359,128 @@ export default function SaleForm({
               <Plus size={15} /> Add Another Brick Size
             </Button>
           </div>
+
+          {/* ── MULTIPLE DELIVERY LOCATIONS (Available in Edit Bill) ──────────── */}
+          {isEditMode && (
+            <div style={{ margin: '22px 0 16px', borderTop: '2px dashed #b8dabf', paddingTop: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#132e1e', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <MapPin size={16} color="#1a6640" /> Multiple Delivery Locations
+                  </h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: '#567160' }}>
+                    Deliver to separate locations under this bill.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleAddLocation}
+                  style={{ fontSize: '13px', padding: '6px 14px', minHeight: '34px', borderColor: '#1a6640', color: '#1a6640', background: '#edf5ef' }}
+                >
+                  <Plus size={15} /> + Add Another Location
+                </Button>
+              </div>
+
+              {extraLocations.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '14px' }}>
+                  {extraLocations.map((loc, idx) => {
+                    const locAmount = (Number(loc.quantity) || 0) * (Number(loc.price) || 0);
+                    return (
+                      <div
+                        key={loc.id || idx}
+                        style={{
+                          background: '#f4f9f5',
+                          border: '1.5px solid #cce2d2',
+                          borderRadius: '12px',
+                          padding: '14px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#1a6640', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <MapPin size={14} /> Location #{idx + 2} {loc.location ? `· ${loc.location}` : ''}
+                          </span>
+                          <button
+                            type="button"
+                            className="icon-button"
+                            aria-label="Remove Location"
+                            onClick={() => handleRemoveLocation(idx)}
+                            style={{ color: '#b42318', padding: '4px 8px', background: '#fff0ed', borderRadius: '6px', border: '1px solid #ffd4cc', cursor: 'pointer', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            title="Remove this location"
+                          >
+                            <Trash2 size={13} /> Remove
+                          </button>
+                        </div>
+
+                        <div className="form-grid" style={{ gap: '10px', marginBottom: '10px' }}>
+                          <Field label="Delivery Location">
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. Vengara, Tirur..."
+                              value={loc.location}
+                              onChange={e => updateExtraLocation(idx, 'location', e.target.value)}
+                              style={{ minHeight: '38px', fontSize: '13.5px' }}
+                            />
+                          </Field>
+
+                          <Field label="Brick Size">
+                            <select
+                              value={loc.product_id}
+                              required
+                              onChange={e => updateExtraLocation(idx, 'product_id', e.target.value)}
+                              style={{ minHeight: '38px', fontSize: '13.5px' }}
+                            >
+                              <option value="">Choose brick size</option>
+                              {availableBricks.map(b => (
+                                <option key={b.id} value={b.id}>
+                                  {b.name} · {b.code} (In stock: {b.available_quantity || 0})
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                        </div>
+
+                        <div className="form-grid" style={{ gap: '10px' }}>
+                          <Field label="Quantity (Bricks)">
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              placeholder="e.g. 500"
+                              required
+                              value={loc.quantity}
+                              onChange={e => updateExtraLocation(idx, 'quantity', e.target.value)}
+                              style={{ minHeight: '38px', fontSize: '13.5px' }}
+                            />
+                          </Field>
+
+                          <Field label="Rate (₹)">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="e.g. 35"
+                              required
+                              value={loc.price}
+                              onChange={e => updateExtraLocation(idx, 'price', e.target.value)}
+                              style={{ minHeight: '38px', fontSize: '13.5px' }}
+                            />
+                          </Field>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px', borderTop: '1px dashed #d5e6d9', paddingTop: '8px' }}>
+                          <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1a6640' }}>
+                            Amount: {currency(locAmount, settings.currency)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── PAYMENT & TOTALS ────────────────────────────────────────────── */}
           <div style={{ margin: '18px 0 10px' }}>
@@ -1315,7 +1601,7 @@ export default function SaleForm({
               Cancel
             </Button>
             <Button type="submit">
-              Review Sale
+              {isEditMode ? 'Update Bill' : 'Review Sale'}
             </Button>
           </div>
         </form>

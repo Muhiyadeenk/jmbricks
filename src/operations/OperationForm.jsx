@@ -6,13 +6,13 @@ import {totals,quantityRules} from './calculations';
 import PurchaseForm from './PurchaseForm';
 import SaleForm from './SaleForm';
 const methods=[['cash','Cash'],['bank_transfer','Bank transfer'],['card','Card'],['upi','UPI'],['other','Other']];
-export const titles={delete_sale:'Delete sale',delete_purchase:'Delete purchase',delete_expense:'Delete expense',sale:'New sale',purchase:'Purchase raw material',production:'Add production',expense:'Add expense',product:'Manage product',category:'Add expense category',adjustment:'Adjust stock',customer_payment:'Receive customer payment',supplier_payment:'Pay supplier'};
+export const titles={delete_sale:'Delete sale',delete_purchase:'Delete purchase',delete_expense:'Delete expense',sale:'New sale',edit_sale:'Edit sales bill',purchase:'Purchase raw material',production:'Add production',expense:'Add expense',product:'Manage product',category:'Add expense category',adjustment:'Adjust stock',customer_payment:'Receive customer payment',supplier_payment:'Pay supplier'};
 export function PaymentField({value,onChange}){return <Field label="Payment method"><select value={value} onChange={e=>onChange(e.target.value)}>{methods.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></Field>}
 export default function OperationForm({kind,initial={},catalog,settings,onSubmit,onClose,busy,error,onCustomerUpdate}) {
   if (kind === 'purchase') {
     return <PurchaseForm initial={initial} catalog={catalog} settings={settings} onSubmit={onSubmit} onClose={onClose} busy={busy} error={error} />;
   }
-  if (kind === 'sale') {
+  if (kind === 'sale' || kind === 'edit_sale') {
     return <SaleForm initial={initial} catalog={catalog} settings={settings} onSubmit={onSubmit} onClose={onClose} busy={busy} error={error} onCustomerUpdate={onCustomerUpdate} />;
   }
   const isTrade=['sale','purchase'].includes(kind),isPayment=kind.endsWith('_payment');

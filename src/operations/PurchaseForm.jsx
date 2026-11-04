@@ -412,6 +412,7 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
         items: [
           {
             product_id: resolvedProductId,
+            description: review.materialName,
             quantity: review.quantity,
             price: review.rate,
           }
