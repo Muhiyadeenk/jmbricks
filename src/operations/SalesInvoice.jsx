@@ -355,7 +355,7 @@ function InvoiceSheet({
         <div className="invoice-brand">
           <img
             src="/jm-bricks-logo.png"
-            alt="JM HOLLO BRICKS Logo"
+            alt="JM Bricks Logo"
             className="invoice-logo"
           />
           <div className="invoice-brand-text">

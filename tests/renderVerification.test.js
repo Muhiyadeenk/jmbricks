@@ -111,3 +111,44 @@ const operationsHtml = ReactDOMServer.renderToString(
   })
 );
 console.log('✓ Operations / Sales page rendered without errors! Length:', operationsHtml.length);
+
+// Test 5: Reports page rendering verification (including Production report)
+const { sampleReportSnapshot } = await import('../src/sampleReports.js');
+const Reports = loadComponent('src/operations/Reports.jsx', {
+  'recharts': new Proxy({}, { get: () => () => null }),
+  'react-router-dom': {
+    Link: ({ children, to }) => React.createElement('a', { href: to }, children)
+  },
+  '../components': {
+    Button: ({ children }) => React.createElement('button', null, children),
+    Card: ({ children, className }) => React.createElement('div', { className }, children),
+    SectionTitle: ({ title, subtitle }) => React.createElement('div', null, title, subtitle),
+    StatCard: ({ label, value }) => React.createElement('div', null, label, value),
+    Table: ({ columns, rows }) => React.createElement('table', null,
+      React.createElement('thead', null, React.createElement('tr', null, columns.map(c => React.createElement('th', { key: c.key }, c.label)))),
+      React.createElement('tbody', null, rows.map(r => React.createElement('tr', { key: r.id }, columns.map(c => React.createElement('td', { key: c.key }, c.render ? c.render(r) : r[c.key])))))
+    ),
+    Field: ({ label, children }) => React.createElement('div', null, label, children),
+    EmptyState: () => React.createElement('div', null, 'Empty'),
+    Dialog: ({ title, children }) => React.createElement('div', null, title, children)
+  },
+  '../lib/supabase': { supabase: null }
+});
+
+const reportsHtml = ReactDOMServer.renderToString(
+  React.createElement(Reports, {
+    settings: { currency: 'INR', timezone: 'Asia/Kolkata', business_name: 'JM Bricks' },
+    revision: 0,
+    owner: true,
+    previewLoader: (from, to) => sampleReportSnapshot(from, to, false),
+    previewDate: '2026-10-12'
+  })
+);
+console.log('✓ Reports page rendered without errors! Length:', reportsHtml.length);
+
+// Test 6: Production report snapshot and table rendering verification
+const snapshot = sampleReportSnapshot('2026-10-01', '2026-10-12', false);
+if (!snapshot.production || !snapshot.production.length) throw new Error('sample snapshot has no production rows');
+if (typeof snapshot.production[0].cement_used !== 'number') throw new Error('cement_used missing from sample production');
+console.log('✓ sampleReportSnapshot includes cement_used:', snapshot.production.map(p => ({ name: p.name, cement: p.cement_used })));
+

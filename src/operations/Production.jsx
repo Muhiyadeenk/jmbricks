@@ -4,8 +4,9 @@ import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Button, Card, Field, Table, Dialog, EmptyState, number, SectionTitle } from '../components';
 import { supabase } from '../lib/supabase';
-import { allRows, today } from './api';
+import { allRows, today, syncProductionCementStock } from './api';
 import { downloadCsv } from './reporting';
+import { calculateCementConsumption, validateCementStock } from './calculations';
 
 // Bricks per line for each brick size (inches)
 export const defaults = { 4: 8, 5: 6, 6: 5, 8: 4 };
@@ -140,13 +141,31 @@ export default function Production({ catalog, settings, profile, revision, onCha
         setEdit({ ...request.payload, status: request.originalStatus || 'draft' });
         throw error;
       }
+
+      // Automatically deduct or restore cement stock in database
+      try {
+        await syncProductionCementStock({
+          payload: request.payload,
+          originalStatus: request.originalStatus,
+          catalog,
+          currentUserId: profile.id
+        });
+      } catch (cementErr) {
+        console.error('Error synchronizing cement stock:', cementErr);
+        setError(cementErr.message || 'Unable to update cement stock.');
+      }
+
       sessionStorage.removeItem(key);
       setPending(null);
       setEdit(null);
+
+      const totalCementUsed = (request.payload.items || []).reduce((s, r) => s + Number(r.cement_packs_used || 0), 0);
       setMessage(
-        request.payload.status === 'completed' ? 'Production completed successfully. Stock has been updated.' :
-        request.payload.status === 'reversed'  ? 'Production deleted. Stock and audit history updated.' :
-        'Production saved. Stock is unchanged.'
+        request.payload.status === 'completed'
+          ? `Production completed successfully! Brick stock increased and ${totalCementUsed} bags of cement were deducted from stock.`
+          : request.payload.status === 'reversed'
+          ? `Production deleted. Brick stock reversed and ${totalCementUsed} bags of cement were restored to stock.`
+          : 'Production saved. Stock is unchanged.'
       );
       onChanged();
     } catch (e) {
@@ -318,20 +337,36 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
 
   const readonly = !canWrite || initial.status === 'reversed' || (initial.status === 'completed' && !owner);
 
+  const cementProduct = catalog?.products?.find(p =>
+    p.kind === 'raw_material' && (p.name.toLowerCase().includes('cement') || (p.code && p.code.toLowerCase().includes('cement')))
+  );
+  const availableCement = Number(cementProduct?.available_quantity || 0);
+  const totalCementNeeded = data.items.reduce((s, r) => s + Number(r.cement_packs_used || 0), 0);
+  const cementCheck = validateCementStock({ availableCement, cementNeeded: totalCementNeeded });
+
   const set = (k, v) => setData(d => ({ ...d, [k]: v }));
 
-  // Update a field on a specific row item; auto-recalculate total bricks when lines change
+  // Update a field on a specific row item; auto-recalculate total bricks and cement when lines change
   const row = (i, k, v) =>
     setData(d => ({
       ...d,
-      items: d.items.map((r, n) =>
-        n !== i ? r : {
-          ...r,
-          [k]: v,
-          // Auto-calculate total bricks = lines × bricks-per-line
-          ...(k === 'production_lines' ? { actual_quantity: Number(v) * Number(r.default_quantity) } : {}),
+      items: d.items.map((r, n) => {
+        if (n !== i) return r;
+        const updated = { ...r, [k]: v };
+        if (k === 'production_lines') {
+          const lines = Number(v) || 0;
+          updated.actual_quantity = lines * Number(r.default_quantity || 0);
+          const autoCement = calculateCementConsumption(r.size, lines);
+          if (r.cement_packs_used === '' || r.cement_packs_used === '0' || r._autoCement) {
+            updated.cement_packs_used = String(autoCement);
+            updated._autoCement = true;
+          }
         }
-      ),
+        if (k === 'cement_packs_used') {
+          updated._autoCement = false;
+        }
+        return updated;
+      }),
     }));
 
   useEffect(() => {
@@ -382,6 +417,15 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
       setLocalError('Use one row per product.');
       return;
     }
+
+    // 3. Cement Stock Validation: Block completion if cement is insufficient (prevent negative stock)
+    if (status === 'completed') {
+      if (!cementCheck.canProceed) {
+        setLocalError(cementCheck.errorMessage);
+        return;
+      }
+    }
+
     setReview({ ...data, status });
   }
 
@@ -397,14 +441,17 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
         }
         onClose={() => setReview(null)}
       >
-        <div className="notice">
-          {review.status === 'completed'
-            ? 'Are you sure you want to complete this production record? Completing production will update available stock.'
-            : review.status === 'reversed'
-            ? 'Delete this entire production session, including all its brick sizes? Completed production will be removed from stock. Drafts do not affect stock. The original record and reason will remain in audit history. Deletion is blocked if stock is insufficient.'
-            : 'This saves the register without increasing stock.'}
+        <div className="notice" style={{ background: review.status === 'completed' ? '#f0f9f3' : review.status === 'reversed' ? '#fef2f2' : '#f8fafc', borderColor: review.status === 'completed' ? '#b8dabf' : review.status === 'reversed' ? '#fecaca' : '#cbd5e1', color: review.status === 'completed' ? '#164a2c' : review.status === 'reversed' ? '#991b1b' : '#334155' }}>
+          <strong>{review.status === 'completed' ? '✓ Production Stock & Cement Update' : review.status === 'reversed' ? '⚠️ Delete Production Confirmation' : 'Save Draft'}</strong>
+          <p style={{ margin: '4px 0 0', fontSize: '13px' }}>
+            {review.status === 'completed'
+              ? `Completing production will add ${number(net)} bricks to finished stock and automatically deduct ${totalCementNeeded} bags of cement from available raw material stock.`
+              : review.status === 'reversed'
+              ? `Deleting this production session will remove ${number(net)} bricks from finished stock and restore ${totalCementNeeded} bags of cement to available stock.`
+              : 'This saves the register without changing stock.'}
+          </p>
         </div>
-        <p>{displayDate(data.date)} · {data.items.length} product rows · {number(net)} net bricks</p>
+        <p>{displayDate(data.date)} · {data.items.length} product rows · {number(net)} net bricks · {totalCementNeeded} bags cement</p>
         <p>Stock is posted on completion day. The register retains the actual production date.</p>
         {(initial.status === 'completed' || review.status === 'reversed') && (
           <Field
@@ -453,6 +500,40 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
             Date: {displayDate(data.date)} · Total bricks = production lines × bricks per line.
           </p>
 
+          {/* Cement Stock & Consumption Banner */}
+          <div
+            className="cement-status-banner"
+            style={{
+              background: cementCheck.sufficient ? '#f0f9f3' : '#fef2f2',
+              border: `1.5px solid ${cementCheck.sufficient ? '#b8dabf' : '#fca5a5'}`,
+              borderRadius: '10px',
+              padding: '12px 16px',
+              margin: '12px 0 16px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '8px'
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: cementCheck.sufficient ? '#164a2c' : '#991b1b' }}>
+                {cementCheck.sufficient ? '🧱 Cement Consumption & Stock Sync' : '⚠️ Insufficient Cement Stock!'}
+              </div>
+              <div style={{ fontSize: '13px', color: cementCheck.sufficient ? '#4a6252' : '#b91c1c', marginTop: '2px' }}>
+                {cementCheck.sufficient
+                  ? `Required: ${totalCementNeeded} bags · Available in stock: ${availableCement} bags · Remaining after production: ${cementCheck.balanceAfter} bags`
+                  : `Requires ${totalCementNeeded} bags of cement, but only ${availableCement} bags are available in stock. Cannot complete to prevent negative stock.`}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#4a6252', textTransform: 'uppercase' }}>Cement Stock</span>
+              <div style={{ fontSize: '20px', fontWeight: 800, color: cementCheck.sufficient ? '#1a6640' : '#b91c1c' }}>
+                {number(availableCement)} <span style={{ fontSize: '12px', fontWeight: 500 }}>Bags</span>
+              </div>
+            </div>
+          </div>
+
           {/* Production rows (one per brick size) */}
           {data.items.map((r, i) => {
             const choices = catalog.products.filter(
@@ -476,6 +557,8 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
                         );
                         // Auto-set bricks per line and recalculate total
                         const factor = defaults[size] || '';
+                        const lines = Number(r.production_lines || 0);
+                        const autoCement = calculateCementConsumption(size, lines);
                         setData(d => ({
                           ...d,
                           items: d.items.map((r, n) =>
@@ -484,7 +567,9 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
                               size,
                               product_id:       product?.id || '',
                               default_quantity: factor,
-                              actual_quantity:  Number(r.production_lines || 0) * Number(factor),
+                              actual_quantity:  lines * Number(factor),
+                              cement_packs_used: (r.cement_packs_used === '' || r.cement_packs_used === '0' || r._autoCement) ? String(autoCement) : r.cement_packs_used,
+                              _autoCement: (r.cement_packs_used === '' || r.cement_packs_used === '0' || r._autoCement)
                             }
                           ),
                         }));
@@ -582,8 +667,8 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
 
         </fieldset>
 
-        <div className="notice">
-          Net production: {number(net)} bricks. Cement sacks are recorded as whole packs and never added to brick stock.
+        <div className="notice" style={{ background: cementCheck.sufficient ? '#f0f9f3' : '#fef2f2', borderColor: cementCheck.sufficient ? '#b8dabf' : '#fca5a5', color: cementCheck.sufficient ? '#164a2c' : '#991b1b' }}>
+          <strong>Net production: {number(net)} bricks</strong> · Cement consumption: <strong>{totalCementNeeded} bags</strong> ({cementCheck.sufficient ? `Available: ${availableCement} bags` : 'INSUFFICIENT STOCK'}). Completing production automatically deducts cement from inventory.
         </div>
 
         {(localError || error) && <p className="auth-error" role="alert">{localError || error}</p>}

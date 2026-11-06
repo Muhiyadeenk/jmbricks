@@ -1,4 +1,5 @@
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase.js';
+import { calculateAvailableStock, calculateRawMaterialStock } from './calculations.js';
 export const formats = {
   sales: { table: 'sales_history', date: 'sale_date', search: 'customer_name', operation: 'sale', title: 'Sales' },
   purchases: { table: 'purchases_history', date: 'purchase_date', search: 'supplier_name', operation: 'purchase', title: 'Purchases' },
@@ -21,12 +22,84 @@ export async function allRows(table, configure=q=>q) {
   }
 }
 export async function catalog() {
-  const [products,customers,suppliers,categories]=await Promise.all([
-    allRows('production_inventory').then(rows=>rows.map(p=>({...p,brick_size:p.production_brick_size,default_quantity:p.production_default_quantity}))),
+  const [
+    products,
+    customers,
+    suppliers,
+    categories,
+    activePurchases,
+    purchaseItems,
+    stockMovements
+  ] = await Promise.all([
+    allRows('production_inventory').then(rows=>rows.map(p=>{
+      const isBrick = p.kind === 'finished_brick';
+      // Formula: Available Stock = Total Production − Total Sold − Rejected Bricks + Other Receipts/Adjustments
+      const computedAvail = isBrick
+        ? calculateAvailableStock({
+            totalProduced: p.total_produced,
+            totalSold: p.total_sold,
+            totalRejected: p.total_rejected,
+            otherAdjustments: p.other_stock_change
+          })
+        : Number(p.available_quantity != null ? p.available_quantity : (p.other_stock_change || 0));
+
+      return {
+        ...p,
+        brick_size: p.production_brick_size,
+        default_quantity: p.production_default_quantity,
+        available_quantity: computedAvail,
+      };
+    })),
     allRows('customers',q=>q.eq('is_active',true)),
     allRows('suppliers',q=>q.eq('is_active',true)),
     allRows('expense_categories',q=>q.eq('is_active',true)),
+    allRows('purchases', q => q.is('deleted_at', null)).catch(() => []),
+    allRows('purchase_items').catch(() => []),
+    allRows('stock_movements').catch(() => []),
   ]);
+
+  // Calculate Total Purchased directly from active database purchase records (strictly excluding deleted purchases)
+  const activePurchaseIds = new Set((activePurchases || []).map(p => p.id));
+  const activeItems = (purchaseItems || []).filter(item => activePurchaseIds.has(item.purchase_id));
+
+  const purchasedByProduct = {};
+  activeItems.forEach(item => {
+    purchasedByProduct[item.product_id] = (purchasedByProduct[item.product_id] || 0) + Number(item.quantity || 0);
+  });
+
+  // Calculate production consumption and valid adjustments from stock movements
+  const consumedByProduct = {};
+  const adjustmentsByProduct = {};
+
+  (stockMovements || []).forEach(m => {
+    // Exclude stock reversal movements from deleted purchases (e.g. 'Delete purchases ...')
+    if (m.reason && m.reason.startsWith('Delete purchases')) return;
+    if (m.movement_type === 'purchase') return; // Handled directly from active purchase_items above
+
+    if (m.quantity_change < 0 && (m.production_session_id || m.reason?.toLowerCase().includes('production') || m.reason?.toLowerCase().includes('consumed'))) {
+      consumedByProduct[m.product_id] = (consumedByProduct[m.product_id] || 0) + Math.abs(Number(m.quantity_change || 0));
+    } else {
+      adjustmentsByProduct[m.product_id] = (adjustmentsByProduct[m.product_id] || 0) + Number(m.quantity_change || 0);
+    }
+  });
+
+  // Apply accurate Total Purchased, Total Consumed in Production, and Available Stock to all raw materials
+  products.forEach(p => {
+    if (p.kind === 'raw_material') {
+      const purchased = purchasedByProduct[p.id] || 0;
+      const consumed = consumedByProduct[p.id] || 0;
+      const adjustments = adjustmentsByProduct[p.id] || 0;
+
+      p.total_purchased = purchased;
+      p.total_consumed = consumed;
+      // Formula: Available Stock = Total Purchased − Consumed in Production + Other Valid Stock Adjustments
+      p.available_quantity = calculateRawMaterialStock({
+        totalPurchased: purchased,
+        totalConsumed: consumed,
+        otherAdjustments: adjustments
+      });
+    }
+  });
   customers.sort((a,b)=>{
     if(a.created_at && b.created_at){
       const diff=new Date(b.created_at)-new Date(a.created_at);
@@ -79,7 +152,7 @@ export async function execute(request) {
 }
 
 export async function updateSaleBill({ saleId, payload, originalSale, catalog, currentUserId }) {
-  // Always fetch fresh DB state to ensure accurate current stock diffs and avoid double-adjustments on retries
+  // Always fetch fresh DB state to ensure accurate current items
   let origRecord = originalSale?.record;
   let origItems = originalSale?.items;
   let origPayments = originalSale?.payments;
@@ -98,62 +171,10 @@ export async function updateSaleBill({ saleId, payload, originalSale, catalog, c
   const userId = currentUserId || origRecord?.created_by || '631e8bd7-7f52-4119-bade-caa73a851f1d';
   const receiptNum = origRecord?.receipt_number || saleId;
 
-  // 1. Calculate stock movement differences per product
-  const origQtyMap = {};
-  (origItems || []).forEach(it => {
-    origQtyMap[it.product_id] = (origQtyMap[it.product_id] || 0) + Number(it.quantity || 0);
-  });
-
-  const newQtyMap = {};
-  (payload.items || []).forEach(it => {
-    newQtyMap[it.product_id] = (newQtyMap[it.product_id] || 0) + Number(it.quantity || 0);
-  });
-
-  const allProductIds = new Set([...Object.keys(origQtyMap), ...Object.keys(newQtyMap)]);
-
-  for (const prodId of allProductIds) {
-    const qOrig = origQtyMap[prodId] || 0;
-    const qNew = newQtyMap[prodId] || 0;
-    const diff = qOrig - qNew; // diff > 0: customer bought less -> return to stock; diff < 0: customer bought more -> deduct
-
-    if (diff !== 0) {
-      const { data: latestSm } = await supabase
-        .from('stock_movements')
-        .select('balance_after')
-        .eq('product_id', prodId)
-        .order('posting_number', { ascending: false })
-        .limit(1);
-
-      let currentBalance = 0;
-      if (latestSm && latestSm.length > 0 && latestSm[0].balance_after != null) {
-        currentBalance = Number(latestSm[0].balance_after);
-      } else {
-        const prod = catalog?.products?.find(p => p.id === prodId);
-        currentBalance = Number(prod?.available_quantity || 0);
-      }
-      const newBalance = currentBalance + diff;
-      const prodName = catalog?.products?.find(p => p.id === prodId)?.name || 'Brick';
-
-      const movementPayload = {
-        id: crypto.randomUUID(),
-        request_id: crypto.randomUUID(),
-        product_id: prodId,
-        movement_date: payload.date || origRecord.sale_date,
-        movement_type: 'adjustment',
-        quantity_change: diff,
-        balance_after: newBalance,
-        created_by: userId,
-        reason: diff > 0
-          ? `Edit sale #${receiptNum}: returned ${diff} ${prodName} to stock`
-          : `Edit sale #${receiptNum}: deducted ${-diff} ${prodName} for updated bill`
-      };
-
-      const { error: smErr } = await supabase.from('stock_movements').insert(movementPayload);
-      if (smErr) throw smErr;
-    }
-  }
-
-  // 2. Update sale_items: update existing rows in-place to preserve stock_movements foreign keys
+  // 1. Update sale_items:
+  // Note: production_inventory calculates total_sold directly from active sale_items (where deleted_at IS NULL).
+  // Updating sale_items.quantity automatically and accurately updates total_sold and available_quantity in real time.
+  // We update existing rows in-place to preserve foreign key integrity with stock_movements.
   const origItemByProduct = {};
   (origItems || []).forEach(it => {
     origItemByProduct[it.product_id] = it;
@@ -197,11 +218,16 @@ export async function updateSaleBill({ saleId, payload, originalSale, catalog, c
     try {
       await supabase.from('sale_items').delete().eq('id', idToDelete);
     } catch (e) {
-      // Ignored if protected by immutable stock movement foreign key
+      // If foreign key prevents delete, set quantity to 0 so it no longer counts in sales or total_sold
+      try {
+        await supabase.from('sale_items').update({ quantity: 0 }).eq('id', idToDelete);
+      } catch (err) {
+        // Ignored
+      }
     }
   }
 
-  // 3. Update sales record
+  // 2. Update sales record
   // Note: in PostgreSQL, 'total' is a generated column and cannot be updated directly.
   // Postgres automatically recalculates 'total' when 'subtotal' and 'discount' are updated.
   const subtotal = payload.items.reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.price) || 0), 0);
@@ -281,4 +307,143 @@ export async function updateSaleBill({ saleId, payload, originalSale, catalog, c
   }
 
   return { id: saleId, receipt_number: receiptNum };
+}
+
+export async function syncProductionCementStock({ payload, originalStatus, catalog, currentUserId }) {
+  if (!payload || !payload.items || !Array.isArray(payload.items)) return;
+
+  const totalCementNeeded = payload.items.reduce((s, r) => s + Number(r.cement_packs_used || 0), 0);
+  if (totalCementNeeded <= 0 && payload.status !== 'reversed') return;
+
+  // Find Cement product in catalog or database
+  let cementProduct = catalog?.products?.find(p =>
+    p.kind === 'raw_material' && (p.name.toLowerCase().includes('cement') || (p.code && p.code.toLowerCase().includes('cement')))
+  );
+  if (!cementProduct) {
+    const { data: prods } = await supabase
+      .from('products')
+      .select('*')
+      .eq('kind', 'raw_material');
+    cementProduct = prods?.find(p => p.name.toLowerCase().includes('cement') || (p.code && p.code.toLowerCase().includes('cement')));
+  }
+  if (!cementProduct) return;
+
+  const isCompleting = payload.status === 'completed' && originalStatus !== 'completed';
+  const isEditingCompleted = payload.status === 'completed' && originalStatus === 'completed';
+  const isReversing = payload.status === 'reversed';
+
+  const userId = currentUserId || '631e8bd7-7f52-4119-bade-caa73a851f1d';
+  const ref = payload.reference_number || payload.id;
+
+  // 1. Fetch current cement balance from latest stock movement
+  const { data: latestSm } = await supabase
+    .from('stock_movements')
+    .select('balance_after')
+    .eq('product_id', cementProduct.id)
+    .order('posting_number', { ascending: false })
+    .limit(1);
+
+  let currentBalance = 0;
+  if (latestSm && latestSm.length > 0 && latestSm[0].balance_after != null) {
+    currentBalance = Number(latestSm[0].balance_after);
+  } else {
+    currentBalance = Number(cementProduct.available_quantity || 0);
+  }
+
+  let quantityChange = 0;
+  let reason = '';
+
+  if (isCompleting) {
+    // Check for existing deduction for this session to prevent double deduction
+    const { data: existingSm } = await supabase
+      .from('stock_movements')
+      .select('id')
+      .eq('product_id', cementProduct.id)
+      .eq('production_session_id', payload.id)
+      .lt('quantity_change', 0);
+
+    if (existingSm && existingSm.length > 0) {
+      // Already deducted, do not double-deduct
+      return;
+    }
+
+    if (currentBalance < totalCementNeeded) {
+      throw new Error(`Insufficient cement stock! Production requires ${totalCementNeeded} bags of cement, but only ${currentBalance} bags are available. Cannot allow negative cement stock.`);
+    }
+
+    quantityChange = -totalCementNeeded;
+    reason = `Production ${ref}: auto-deducted ${totalCementNeeded} bags cement`;
+  } else if (isEditingCompleted) {
+    // Check previous net deduction for this session
+    const { data: previousMovements } = await supabase
+      .from('stock_movements')
+      .select('quantity_change')
+      .eq('product_id', cementProduct.id)
+      .eq('production_session_id', payload.id);
+
+    const netPreviouslyDeducted = (previousMovements || []).reduce((s, m) => s - Number(m.quantity_change), 0);
+    const diff = netPreviouslyDeducted - totalCementNeeded;
+
+    if (diff !== 0) {
+      if (diff < 0 && currentBalance < -diff) {
+        throw new Error(`Insufficient cement stock! Updating production requires ${-diff} more bags of cement, but only ${currentBalance} bags are available.`);
+      }
+      quantityChange = diff;
+      reason = diff < 0
+        ? `Edit production ${ref}: deducted ${-diff} additional bags cement`
+        : `Edit production ${ref}: restored ${diff} unused bags cement to stock`;
+    }
+  } else if (isReversing) {
+    // Look up what cement was deducted for this session
+    const { data: existingDeductions } = await supabase
+      .from('stock_movements')
+      .select('quantity_change')
+      .eq('product_id', cementProduct.id)
+      .eq('production_session_id', payload.id)
+      .lt('quantity_change', 0);
+
+    const alreadyDeducted = (existingDeductions || []).reduce((s, m) => s + Math.abs(Number(m.quantity_change)), 0);
+    const cementToRestore = alreadyDeducted > 0 ? alreadyDeducted : totalCementNeeded;
+
+    if (cementToRestore <= 0) return;
+
+    // Check if reversal was already posted
+    const { data: existingReversals } = await supabase
+      .from('stock_movements')
+      .select('quantity_change')
+      .eq('product_id', cementProduct.id)
+      .eq('production_session_id', payload.id)
+      .gt('quantity_change', 0);
+
+    const alreadyRestored = (existingReversals || []).reduce((s, m) => s + Number(m.quantity_change), 0);
+    const netToRestore = cementToRestore - alreadyRestored;
+
+    if (netToRestore <= 0) return;
+
+    quantityChange = netToRestore;
+    reason = `Delete production ${ref}: restored ${netToRestore} bags cement to stock`;
+  }
+
+  if (quantityChange !== 0) {
+    const newBalance = currentBalance + quantityChange;
+    if (newBalance < 0) {
+      throw new Error(`Cannot complete production: Cement stock would become negative (${newBalance} bags).`);
+    }
+
+    const movementPayload = {
+      id: crypto.randomUUID(),
+      request_id: crypto.randomUUID(),
+      product_id: cementProduct.id,
+      movement_date: payload.date,
+      movement_type: 'adjustment',
+      quantity_change: quantityChange,
+      balance_after: newBalance,
+      created_by: userId,
+      reason,
+      production_session_id: payload.id
+    };
+
+    const { error: smErr } = await supabase.from('stock_movements').insert(movementPayload);
+    if (smErr) throw smErr;
+  }
 }

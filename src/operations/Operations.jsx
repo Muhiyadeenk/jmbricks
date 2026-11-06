@@ -155,13 +155,27 @@ function StockPage({catalog,settings,owner,open,onHistory}){
  const status=p=>!p.is_stocked?'Not tracked':Number(p.available_quantity)===0?'Out of Stock':Number(p.available_quantity)<=Number(p.minimum_stock)?'Low Stock':'In Stock';
  const list=catalog.products.filter(p=>`${p.name} ${p.code} ${p.size_label||''}`.toLowerCase().includes(search.toLowerCase())&&(filter==='all'||filter==='inactive'&&!p.is_active||filter==='finished_brick'&&p.kind===filter||filter==='raw_material'&&p.kind===filter||String(p.brick_size)===filter||status(p)===filter));
 
- const brickList = list.filter(p => p.kind === 'finished_brick');
- const rawList = list.filter(p => p.kind === 'raw_material');
+ // 1. Maintain only ONE unique stock entry per brick size (removes duplicate 4-inch entries)
+ const seenSizes = new Set();
+ const brickList = list
+   .filter(p => p.kind === 'finished_brick')
+   .filter(p => {
+     const sizeKey = p.brick_size != null ? String(p.brick_size) : (p.name || p.id);
+     if (seenSizes.has(sizeKey)) return false;
+     seenSizes.add(sizeKey);
+     return true;
+   });
+
+ // 2. Simplify Raw Material Stock: Display ONLY CEMENT (exclude sand, baby metal, etc.)
+ const rawList = list.filter(p => p.kind === 'raw_material' && (
+   p.name.toLowerCase().includes('cement') || (p.code && p.code.toLowerCase().includes('cement'))
+ ));
 
  const showBricks = filter === 'all' || filter === 'finished_brick' || ['4','5','6','8'].includes(filter) || brickList.length > 0;
  const showRaw = filter === 'all' || filter === 'raw_material' || rawList.length > 0;
 
  function renderCard(p) {
+   const isCement = p.kind === 'raw_material' && (p.name.toLowerCase().includes('cement') || (p.code && p.code.toLowerCase().includes('cement')));
    return (
      <Card className="product-card" key={p.id}>
        <div className="product-top">
@@ -173,11 +187,11 @@ function StockPage({catalog,settings,owner,open,onHistory}){
          {p.kind==='finished_brick'?<Brick/>:<Package size={68} color="#2b6b47"/>}
        </div>
        <h3>{p.name}</h3>
-       <p>{p.kind==='finished_brick'?`${p.length_mm} × ${p.width_mm} × ${p.height_mm} mm`:p.unit}{p.size_label?` · ${p.size_label}`:''}</p>
+       <p>{p.kind==='finished_brick'?`${p.length_mm} × ${p.width_mm} × ${p.height_mm} mm`:isCement ? 'Standard 50kg Bags' : p.unit}{p.size_label?` · ${p.size_label}`:''}</p>
        <div className="product-numbers">
          <div>
            <strong>{p.is_stocked?number(p.available_quantity):'—'}</strong>
-           <small>{p.is_stocked?`${p.unit} ${p.kind==='raw_material'?'in stock':'available'}`:'Not stocked'}</small>
+           <small>{p.is_stocked ? (isCement ? 'Bags in stock' : `${p.unit} in stock`) : 'Not stocked'}</small>
          </div>
          {p.kind==='finished_brick'?(
            <b>{currency(p.selling_price,settings.currency)}<small>selling price / {p.unit}</small></b>
@@ -185,7 +199,7 @@ function StockPage({catalog,settings,owner,open,onHistory}){
            <b>Raw Material<small>For brick production</small></b>
          )}
        </div>
-       <div className="product-footer">Minimum stock<strong>{number(p.minimum_stock)}</strong></div>
+       <div className="product-footer">Minimum stock<strong>{number(p.minimum_stock)} {isCement ? 'Bags' : p.unit}</strong></div>
        <div className="product-footer">Stock value<strong>{p.inventory_value==null?'Unknown':currency(p.inventory_value,settings.currency)}</strong></div>
        {p.kind==='finished_brick'?(
          <>
@@ -193,7 +207,19 @@ function StockPage({catalog,settings,owner,open,onHistory}){
            <div className="product-footer">Last production<strong>{displayDate(p.last_production_date)}</strong></div>
          </>
        ):(
-         <div className="product-footer">Purchased / Added<strong>{number(p.other_stock_change||0)} {p.unit}</strong></div>
+         isCement ? (
+           <>
+             <div className="product-footer">Total Purchased<strong>{number(p.total_purchased ?? 0)} Bags</strong></div>
+             <div className="product-footer">Consumed in Production<strong style={{ color: '#b54708' }}>−{number(p.total_consumed || 0)} Bags</strong></div>
+           </>
+         ) : (
+           <>
+             <div className="product-footer">Total Purchased<strong>{number(p.total_purchased ?? 0)} {p.unit}</strong></div>
+             {Number(p.total_consumed || 0) > 0 && (
+               <div className="product-footer">Consumed in Production<strong style={{ color: '#b54708' }}>−{number(p.total_consumed || 0)} {p.unit}</strong></div>
+             )}
+           </>
+         )
        )}
        <div className="product-buttons">
          {p.is_stocked&&<Button variant="secondary" onClick={()=>onHistory(p)}><History size={14}/>History</Button>}
@@ -218,7 +244,7 @@ function StockPage({catalog,settings,owner,open,onHistory}){
          <input aria-label="Search products" placeholder="Search product name, code or raw material…" value={search} onChange={e=>setSearch(e.target.value)}/>
        </div>
        <select aria-label="Filter products" value={filter} onChange={e=>setFilter(e.target.value)}>
-         {[['all','All inventory'],... [4,5,6,8].map(s=>[String(s),`${s}-inch bricks`]),['finished_brick','Finished bricks only'],['raw_material','Raw materials only (Baby Metal, Dust, Cement, Chemical)'],['Low Stock','Low Stock'],['Out of Stock','Out of Stock'],['inactive','Inactive']].map(([v,l])=><option key={v} value={v}>{l}</option>)}
+         {[['all','All inventory'],... [4,5,6,8].map(s=>[String(s),`${s}-inch bricks`]),['finished_brick','Finished bricks only'],['raw_material','Cement stock only'],['Low Stock','Low Stock'],['Out of Stock','Out of Stock'],['inactive','Inactive']].map(([v,l])=><option key={v} value={v}>{l}</option>)}
        </select>
      </div>
      <div className="stock-layout">
@@ -237,17 +263,17 @@ function StockPage({catalog,settings,owner,open,onHistory}){
            </div>
          )}
 
-         {/* 2. Raw Material Stock Section */}
+         {/* 2. Raw Material Stock Section (ONLY CEMENT) */}
          {showRaw && (
            <div className="stock-section">
-             <SectionTitle title="Raw Material Stock" subtitle="Manufacturing materials (Cement, Baby Metal, Dust, Chemical)" />
+             <SectionTitle title="Raw Material Stock (Cement)" subtitle="Cement stock ready for daily brick production" />
              <div className="product-grid" style={{ marginTop: '12px' }}>
                {rawList.map(renderCard)}
                {rawList.length === 0 && (
                  <Card style={{ gridColumn: '1 / -1' }}>
                    <EmptyState
-                     title="No raw material stock records found"
-                     description="No raw materials are currently tracked in your products inventory."
+                     title="No cement stock records found"
+                     description="No cement stock records are currently tracked in your products inventory."
                    />
                  </Card>
                )}

@@ -1,7 +1,7 @@
 {
-  "name": "JM Hollo Bricks",
+  "name": "JM Bricks",
   "short_name": "JM Bricks",
-  "description": "JM Hollo Bricks business dashboard — production, stock, sales and expenses.",
+  "description": "JM Bricks business dashboard — production, stock, sales and expenses.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
