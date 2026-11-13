@@ -3,6 +3,7 @@ import ReactDOMServer from 'react-dom/server';
 import esbuild from 'esbuild';
 import fs from 'fs';
 import * as locationHelpers from '../src/operations/locationHelpers.js';
+import * as reporting from '../src/operations/reporting.js';
 
 function loadComponent(filePath, mockModules = {}) {
   const code = esbuild.transformSync(fs.readFileSync(filePath, 'utf8'), {
@@ -20,12 +21,27 @@ function loadComponent(filePath, mockModules = {}) {
       Button: ({ children }) => React.createElement('button', null, children),
       Field: ({ label, children }) => React.createElement('div', null, label, children),
       Dialog: ({ title, children }) => React.createElement('div', null, title, children),
-      Badge: ({ children }) => React.createElement('span', null, children)
+      Badge: ({ children }) => React.createElement('span', null, children),
+      Card: ({ children, className }) => React.createElement('div', { className }, children),
+      SectionTitle: ({ title, subtitle }) => React.createElement('div', null, title, subtitle),
+      StatCard: ({ label, value }) => React.createElement('div', null, label, value),
+      Table: ({ columns, rows }) => React.createElement('table', null,
+        React.createElement('thead', null, React.createElement('tr', null, (columns || []).map(c => React.createElement('th', { key: c.key }, c.label)))),
+        React.createElement('tbody', null, (rows || []).map(r => React.createElement('tr', { key: r.id || Math.random() }, (columns || []).map(c => React.createElement('td', { key: c.key }, c.render ? c.render(r) : r[c.key])))))
+      ),
+      EmptyState: () => React.createElement('div', null, 'Empty')
     };
-    if (name === './api') return { today: () => '2026-11-04', currency: (v) => '₹' + v };
+    if (name === './api') return { today: () => '2026-11-04', currency: (v) => '₹' + v, allRows: () => Promise.resolve([]) };
     if (name === './calculations') return { totals: () => ({ subtotal: 0, total: 0, balance: 0, valid: true }) };
     if (name === '../lib/supabase') return { supabase: { from: () => ({ select: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }) } };
     if (name === './locationHelpers') return locationHelpers;
+    if (name === './reporting') return reporting;
+    if (name === './ReportSections') return loadComponent('src/operations/ReportSections.jsx', {
+      'recharts': new Proxy({}, { get: () => () => null }),
+      '../components': req('../components'),
+      './reporting': reporting,
+      './api': req('./api')
+    });
     return {};
   };
 

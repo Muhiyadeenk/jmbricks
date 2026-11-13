@@ -4136,3 +4136,433 @@ dialog:has(.a4-invoice-wrapper) {
     align-self: flex-end;
   }
 }
+
+/* ==========================================================================
+   COMPREHENSIVE ERP & BI REPORTING MODULE STYLES
+   ========================================================================== */
+
+.comprehensive-reports {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding-bottom: 40px;
+}
+
+.report-header-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.report-eyebrow-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #e7f3ec;
+  color: #176B48;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.report-controls-card {
+  background: #ffffff;
+  border: 1px solid #e2e8e4;
+  border-radius: 10px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  margin-bottom: 18px;
+}
+
+.period-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.period-pill {
+  background: #f4f7f5;
+  color: #374151;
+  border: 1px solid #e1e7e3;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.period-pill:hover {
+  background: #e9f0eb;
+  color: #176B48;
+  border-color: #c7d9cc;
+}
+
+.period-pill.active {
+  background: #176B48;
+  color: #ffffff;
+  border-color: #176B48;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(23, 107, 72, 0.22);
+}
+
+.custom-date-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed #e1e7e3;
+}
+
+.active-period-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: #f8faf8;
+  border: 1px solid #e1ebe3;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 14px;
+  font-size: 13px;
+}
+
+.period-badge-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.period-target-pill {
+  font-weight: 600;
+  color: #176B48;
+  background: #e7f3ec;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12.5px;
+}
+
+.period-compare-pill {
+  color: #64748b;
+  background: #f1f5f3;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.report-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.report-tabs-nav {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px 0 10px;
+  margin: 14px 0 20px;
+  border-bottom: 1px solid #e2e8e4;
+  -webkit-overflow-scrolling: touch;
+}
+
+.report-tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  padding: 8px 14px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #4b5563;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  border-radius: 4px 4px 0 0;
+  transition: all 0.15s ease;
+}
+
+.report-tab-btn:hover {
+  color: #176B48;
+  background: #f8faf8;
+}
+
+.report-tab-btn.active {
+  color: #176B48;
+  border-bottom-color: #176B48;
+  font-weight: 600;
+  background: #f2f7f4;
+}
+
+.report-tab-badge {
+  font-size: 11px;
+  background: #e7f3ec;
+  color: #176B48;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* KPI GRID & CARDS */
+.report-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.report-overview-card {
+  background: #ffffff;
+  border: 1px solid #e2e8e4;
+  border-radius: 10px;
+  padding: 18px 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.report-overview-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.kpi-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.kpi-icon-wrap {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e7f3ec;
+  color: #176B48;
+}
+
+.kpi-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #4b5563;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.kpi-main-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kpi-amount {
+  font-size: 27px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.delta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 12px;
+}
+
+.delta-badge.favorable {
+  background: #e7f3ec;
+  color: #176B48;
+}
+
+.delta-badge.unfavorable {
+  background: #fdf2f2;
+  color: #b91c1c;
+}
+
+.delta-badge.neutral {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.kpi-sub-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid #f1f4f2;
+  padding-top: 10px;
+}
+
+.kpi-sub-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.kpi-sub-row strong {
+  color: #1f2937;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-narrative {
+  font-size: 11.5px;
+  color: #475569;
+  background: #f8faf9;
+  padding: 9px 12px;
+  border-radius: 6px;
+  border-left: 3px solid #176B48;
+  line-height: 1.45;
+}
+
+/* KPI STRIP */
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.kpi-strip-item {
+  background: #ffffff;
+  border: 1px solid #e2e8e4;
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kpi-strip-item span {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.kpi-strip-item strong {
+  font-size: 20px;
+  font-weight: 700;
+  color: #176B48;
+  font-variant-numeric: tabular-nums;
+}
+
+/* INCOME STATEMENT & FINANCIALS */
+.income-statement-card {
+  background: #ffffff;
+  border: 1px solid #e2e8e4;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.cash-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+/* COMPARISONS */
+.comparison-banner {
+  background: #f8faf8;
+  border: 1px solid #e1ebe3;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.comparison-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.comparison-metric-card {
+  background: #ffffff;
+  border: 1px solid #e2e8e4;
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* PRINT MEDIA */
+.report-official-print-header {
+  display: none;
+}
+
+@media print {
+  body:has(.comprehensive-reports) {
+    background: #ffffff !important;
+  }
+
+  .comprehensive-reports .no-print,
+  .comprehensive-reports .report-tabs-nav,
+  .comprehensive-reports .report-controls-card,
+  .comprehensive-reports .report-top-actions,
+  .comprehensive-reports .btn {
+    display: none !important;
+  }
+
+  .report-official-print-header {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 2px solid #176B48;
+    padding-bottom: 12px;
+    margin-bottom: 18px;
+  }
+
+  .report-overview-card,
+  .card {
+    box-shadow: none !important;
+    border: 1px solid #d1d5db !important;
+    break-inside: avoid;
+  }
+
+  .table-wrap table {
+    font-size: 10.5px !important;
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .period-pills-row {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 6px;
+  }
+
+  .kpi-amount {
+    font-size: 22px;
+  }
+
+  .kpi-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
