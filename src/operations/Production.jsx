@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Factory, Package, Layers, CalendarDays, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Button, Card, Field, Table, Dialog, EmptyState, number, SectionTitle } from '../components';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { Button, Card, Field, Table, Dialog, EmptyState, number, SectionTitle, StatCard } from '../components';
 import { supabase } from '../lib/supabase';
 import { allRows, today, syncProductionCementStock } from './api';
 import { downloadCsv } from './reporting';
@@ -758,59 +758,74 @@ export function ProductionOverview({ settings, revision }) {
     .map(([date, net]) => ({ date, net }));
 
   return (
-    <>
-      <SectionTitle title="Production today" subtitle={displayDate(end)} />
+    <div className="production-overview-section" style={{ marginTop: '28px' }}>
+      <SectionTitle title="Production Today" subtitle={`Live daily production stats · ${displayDate(end)}`} />
       {error ? <p className="auth-error">{error}</p> : (
         <>
-          <div className="report-total-grid">
+          <div className="stats-grid report-stats production-stats-grid" style={{ margin: '14px 0 20px' }}>
             {[
-              ['Actual produced',  'quantity_produced'],
-              ['Net production',   'net_quantity'],
-              ['Rejected bricks',  'rejected_quantity'],
-              ['Cement sacks',     'cement_packs_used'],
-            ].map(([l, k]) => (
-              <Card className="report-total" key={k}>
-                <span>{l}</span>
-                <strong>{number(sum(k))}</strong>
-              </Card>
+              ['Actual Produced',   'quantity_produced', 'Total bricks pressed today', Factory, 'neutral'],
+              ['Net Production',    'net_quantity',      'Good bricks added to stock', Package, 'green'],
+              ['Rejected Bricks',   'rejected_quantity', 'Damaged or broken bricks',   Trash2,  'red'],
+              ['Cement Sacks Used', 'cement_packs_used', 'Consumed standard 50kg bags', Layers, 'amber'],
+            ].map(([l, k, foot, Icon, tone]) => (
+              <StatCard
+                key={k}
+                label={l}
+                value={number(sum(k))}
+                foot={foot}
+                icon={Icon}
+                tone={tone}
+              />
             ))}
           </div>
 
-          <Card>
-            <SectionTitle
-              title="Net production"
-              action={
-                <select aria-label="Production chart period" value={period} onChange={e => setPeriod(e.target.value)}>
-                  {['daily', 'weekly', 'monthly'].map(s => <option key={s}>{s}</option>)}
-                </select>
-              }
-            />
-            {chart.length ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={chart}>
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="net" name="Net bricks" fill="#23754d" />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyState title="No completed production" description="Complete a production session to see your chart." />
-            )}
-          </Card>
+          <div className="connection-grid">
+            <Card className="chart-card">
+              <SectionTitle
+                title="Net Production Overview"
+                subtitle="Output of quality finished bricks"
+                action={
+                  <div className="segmented">
+                    {['daily', 'weekly', 'monthly'].map(s => (
+                      <button key={s} className={period === s ? 'active' : ''} onClick={() => setPeriod(s)}>
+                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                }
+              />
+              {chart.length ? (
+                <div className="chart" style={{ height: 250, padding: '10px 16px 12px 6px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chart} margin={{ top: 15, right: 15, left: -15, bottom: 0 }}>
+                      <CartesianGrid vertical={false} stroke="#EAEFEA" strokeDasharray="3 3" />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#6B7F74' }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#6B7F74' }} />
+                      <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #E5EBE6', boxShadow: '0 4px 14px rgba(0,0,0,0.06)' }} />
+                      <Bar dataKey="net" name="Net bricks" fill="#176B48" radius={[5, 5, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <EmptyState title="No completed production" description="Complete a production session to see your chart." />
+              )}
+            </Card>
 
-          <Card>
-            <SectionTitle
-              title="Recent completed production"
-              action={<Link to="/production">View register</Link>}
-            />
-            <Table
-              rows={recent}
-              columns={tableCols.filter(c => ['reference_number', 'production_date', 'brick_size', 'net_quantity'].includes(c.key))}
-            />
-          </Card>
+            <Card>
+              <SectionTitle
+                title="Recent Production Runs"
+                subtitle="Latest completed sessions"
+                action={<Link className="text-link" to="/production">View register</Link>}
+              />
+              <Table
+                rows={recent}
+                columns={tableCols.filter(c => ['reference_number', 'production_date', 'brick_size', 'net_quantity'].includes(c.key))}
+              />
+            </Card>
+          </div>
         </>
       )}
-    </>
+    </div>
   );
 }

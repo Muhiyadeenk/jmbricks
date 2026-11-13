@@ -18,6 +18,22 @@ export default function ConnectedWorkspace() {
   const [mobile, setMobile] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const isMoreActive = ['/purchases', '/expenses', '/reports', '/settings'].some(p => location.pathname === p || location.pathname.startsWith(p + '/'));
+
+  const titleMap = {
+    '/': 'Dashboard',
+    '/sales': 'Sales',
+    '/purchases': 'Purchases',
+    '/stock': 'Stock Management',
+    '/production': 'Production',
+    '/expenses': 'Expenses',
+    '/reports': 'Reports',
+    '/settings': 'Settings'
+  };
+  const currentTitle = titleMap[location.pathname] || 'Dashboard';
+  const userInitials = profile?.display_name
+    ? profile.display_name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
+    : 'JM';
+
   useEffect(() => {
     let alive = true;
     setBusy(true); setError(''); setProfile(null); setSettings(null);
@@ -68,11 +84,13 @@ export default function ConnectedWorkspace() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="preview-note"><ShieldCheck size={16} /> Authenticated workspace<small>Phase 4 · operations & reports</small></div>
           <div className="profile">
-            <span className="avatar">JM</span>
-            <div className="brand-text"><strong>{profile.display_name || 'Team member'}</strong><small>{profile.role}</small></div>
-            <button className="icon-button mobile-drawer-logout" disabled={signingOut} onClick={logout} aria-label="Sign out">
+            <span className="avatar">{userInitials}</span>
+            <div className="brand-text">
+              <strong>{profile.display_name || 'Team member'}</strong>
+              <small>{profile.role === 'owner' ? 'Business Owner' : profile.role || 'Staff'}</small>
+            </div>
+            <button className="icon-button sidebar-logout-btn" disabled={signingOut} onClick={logout} title="Sign out" aria-label="Sign out">
               <LogOut size={16} />
             </button>
           </div>
@@ -81,17 +99,27 @@ export default function ConnectedWorkspace() {
       <div className="workspace">
         <header>
           <div className="header-left">
-            <button className="icon-button mobile-menu" onClick={() => setMobile(true)} aria-label="Open navigation"><Menu /></button>
+            <button className="icon-button mobile-menu" onClick={() => setMobile(true)} aria-label="Open navigation"><Menu size={20} /></button>
             <span className="mobile-brand-icon" aria-hidden="true"><img src="/jm-bricks-logo.png" alt="" /></span>
-            <div className="header-title-block">
-              <strong>{settings.business_name}</strong>
-              <Badge>Connected</Badge>
+            <div className="header-breadcrumb">
+              <span className="header-business-name">{settings.business_name}</span>
+              <span className="header-breadcrumb-slash">/</span>
+              <strong className="header-page-title">{currentTitle}</strong>
             </div>
           </div>
-          <Button variant="secondary" className="header-signout-btn" disabled={signingOut} onClick={logout}>
-            <LogOut size={15} />
-            <span>{signingOut ? 'Signing out…' : 'Sign out'}</span>
-          </Button>
+          <div className="header-right">
+            <div className="header-profile">
+              <span className="avatar small">{userInitials}</span>
+              <div className="header-profile-info">
+                <strong>{profile.display_name || 'Team member'}</strong>
+                <small>{profile.role === 'owner' ? 'Owner' : profile.role}</small>
+              </div>
+            </div>
+            <Button variant="secondary" className="header-signout-btn" disabled={signingOut} onClick={logout}>
+              <LogOut size={15} />
+              <span>{signingOut ? 'Signing out…' : 'Sign out'}</span>
+            </Button>
+          </div>
         </header>
         <main>
           <Routes>
@@ -144,9 +172,72 @@ function BusinessSettings({ settings, onSaved, canEdit }) {
       const {data,error}=await supabase.from('business_settings').update({business_name:name.trim(),currency,timezone,costing_confirmed:confirmed}).eq('id',true).eq('updated_at',settings.updated_at).select().maybeSingle();
       if(error) throw error;
       if(!data) throw new Error('These settings changed or your access was removed. Reload the page before trying again.');
-      onSaved(data);setMessage('Business settings saved.');
+      onSaved(data);setMessage('Business settings saved successfully.');
     } catch(err) {setError(err.message||'Unable to save settings. Please try again.');}
     finally {lock.current=false;setBusy(false);}
   }
-  return <Card className="settings-card"><SectionTitle title="Business settings" subtitle={canEdit?'Saved securely in your database.':'Only the owner can change these settings.'}/><form onSubmit={save}><fieldset disabled={!canEdit||busy}><Field label="Business name" required maxLength={160} value={name} onChange={e=>setName(e.target.value)}/><Field label="Currency"><select value={currency} onChange={e=>setCurrency(e.target.value)}>{['INR','AED','USD','SAR'].map(v=><option key={v}>{v}</option>)}</select></Field><p className="help">Currency cannot be changed after transactions exist. Amounts are not converted.</p><Field label="Business timezone"><select value={timezone} onChange={e=>setTimezone(e.target.value)}>{['Asia/Kolkata','Asia/Calcutta','Asia/Dubai','Asia/Riyadh','Asia/Muscat','UTC'].map(v=><option key={v}>{v}</option>)}</select></Field><Field label="Dimension unit"><input value="Millimetres (mm)" readOnly/></Field><div className="notice"><span><strong>Inventory costing: moving weighted average</strong><br/>Incoming costs are averaged across available stock. Each sale retains its cost at the time of sale. Unknown costs must remain unknown, not zero. Weighted average costs are saved with each stock movement. Transactions use posting order; older stock dates are rejected.</span></div><label className="checkbox-field"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>Use moving weighted average for this business.</label></fieldset>{error&&<div role="alert" className="auth-error">{error}</div>}{message&&<div role="status" className="notice">{message}</div>}{canEdit&&<Button type="submit" disabled={busy}>{busy?'Saving…':'Save settings'}</Button>}</form></Card>;
+  return (
+    <div className="settings-page-layout">
+      <div className="page-header-block">
+        <div>
+          <span className="eyebrow">PREFERENCES & CONFIGURATION</span>
+          <h1>Business Settings</h1>
+          <p>{canEdit ? 'Manage your business name, currency, timezone, and inventory costing policy.' : 'View business configuration. Only the owner can make changes.'}</p>
+        </div>
+      </div>
+      <Card className="settings-card">
+        <SectionTitle title="General Business Profile" subtitle={canEdit ? 'Saved securely in your database.' : 'Only the owner can change these settings.'} />
+        <form onSubmit={save} className="settings-form">
+          <fieldset disabled={!canEdit || busy}>
+            <div className="form-grid">
+              <Field label="Business name" required maxLength={160} value={name} onChange={e=>setName(e.target.value)} />
+              <Field label="Product dimension unit">
+                <input value="Millimetres (mm)" readOnly />
+              </Field>
+            </div>
+            
+            <div className="settings-section-divider" />
+            <h3 className="settings-subheading">Regional & Financial Settings</h3>
+            
+            <div className="form-grid">
+              <Field label="Display Currency">
+                <select value={currency} onChange={e=>setCurrency(e.target.value)}>
+                  {['INR','AED','USD','SAR'].map(v=><option key={v} value={v}>{v}</option>)}
+                </select>
+              </Field>
+              <Field label="Business Timezone">
+                <select value={timezone} onChange={e=>setTimezone(e.target.value)}>
+                  {['Asia/Kolkata','Asia/Calcutta','Asia/Dubai','Asia/Riyadh','Asia/Muscat','UTC'].map(v=><option key={v} value={v}>{v}</option>)}
+                </select>
+              </Field>
+            </div>
+            <p className="help">Currency cannot be changed after transactions exist. Amounts are not converted.</p>
+
+            <div className="settings-section-divider" />
+            <h3 className="settings-subheading">Inventory Costing Policy</h3>
+
+            <div className="notice costing-notice">
+              <div>
+                <strong>Inventory Costing: Moving Weighted Average</strong>
+                <p>Incoming costs are averaged across available stock. Each sale retains its cost at the time of sale. Unknown costs remain unknown, not zero. Weighted average costs are saved with each stock movement.</p>
+              </div>
+            </div>
+            <label className="checkbox-field">
+              <input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} />
+              <span>Use moving weighted average costing for this business.</span>
+            </label>
+          </fieldset>
+          {error && <div role="alert" className="auth-error">{error}</div>}
+          {message && <div role="status" className="notice success-notice">{message}</div>}
+          {canEdit && (
+            <div className="settings-actions">
+              <Button type="submit" disabled={busy}>
+                {busy ? 'Saving…' : 'Save Settings'}
+              </Button>
+            </div>
+          )}
+        </form>
+      </Card>
+    </div>
+  );
 }

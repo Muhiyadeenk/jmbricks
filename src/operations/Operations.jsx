@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {useLocation,useNavigate,Link} from 'react-router-dom';
-import {Plus,Search,RefreshCw,History,Package,Factory,Wallet,ShoppingBag,ShoppingCart,Printer,Trash2,Eye,Edit3,MessageCircle} from 'lucide-react';
+import {Plus,Search,RefreshCw,History,Package,Factory,Wallet,ShoppingBag,ShoppingCart,Printer,Trash2,Eye,Edit3,MessageCircle,CalendarDays} from 'lucide-react';
 import {Button,Card,Badge,EmptyState,Field,SectionTitle,Table,Dialog,Brick,number} from '../components';
 import {supabase} from '../lib/supabase';
 import {catalog as loadCatalog,history,formats,detail,movements,currency,today,execute,updateSaleBill} from './api';
@@ -11,6 +11,28 @@ import SalesInvoice from './SalesInvoice';
 import Reports,{LiveDashboard} from './Reports';
 import Production,{ProductionOverview,displayDate} from './Production';
 const blankCatalog={products:[],customers:[],suppliers:[],categories:[]};
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good Morning';
+  if (hour < 17) return 'Good Afternoon';
+  return 'Good Evening';
+}
+
+function formatDashboardDate(dateStr, timezone = 'Asia/Kolkata') {
+  try {
+    const d = dateStr ? new Date(`${dateStr}T12:00:00Z`) : new Date();
+    return new Intl.DateTimeFormat('en-IN', {
+      timeZone: timezone,
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    }).format(d);
+  } catch {
+    return dateStr || '';
+  }
+}
 export default function Operations({profile,settings}) {
   const location=useLocation();const navigate=useNavigate();
   const page=location.pathname.slice(1)||'dashboard';
@@ -130,12 +152,112 @@ export default function Operations({profile,settings}) {
   }
   if(loading)return <div className="empty" role="status">Loading your business records…</div>;
   if(error)return <Card><EmptyState title="Workspace unavailable" description={error} action={<Button onClick={()=>setRevision(v=>v+1)}>Try again</Button>}/></Card>;
-  return <><div className="operations-heading"><div><h1>{page==='dashboard'?'Daily operations':page==='stock'?'Stock management':formats[page]?.title||'Reports'}</h1><p>{page==='production'?'Record daily production and automatically update stock.':`Live business records · ${today(settings.timezone)}`}</p></div><Button variant="secondary" onClick={()=>setRevision(v=>v+1)}><RefreshCw size={16}/>Refresh</Button></div>{message&&<div className="notice" role="status">{message}</div>}{!settings.costing_confirmed&&<div className="notice">Before entering stock or sales, the owner must confirm inventory costing in <Link className="text-link" to="/settings">Settings</Link>.</div>}
-    {page==='dashboard'&&<><div className="quick-actions"><span>Quick actions</span>{[['sale',ShoppingBag],['purchase',ShoppingCart],['production',Factory],['expense',Wallet]].map(([kind,Icon])=><Button key={kind} disabled={!canWrite} onClick={()=>open(kind)}><Icon size={16}/>{titles[kind]}</Button>)}</div><ProductionOverview settings={settings} revision={revision}/><LiveDashboard settings={settings} revision={revision} onDetail={setSelected}/></>}
-    {page==='stock'&&<StockPage catalog={catalog} settings={settings} owner={owner} open={open} onHistory={setStockHistory}/>}
-    {(page==='production'||productionNew)&&<Production catalog={catalog} settings={settings} profile={profile} revision={revision} onChanged={()=>setRevision(v=>v+1)} openNew={productionNew} onOpened={()=>setProductionNew(false)}/>}
-    {formats[page]&&page!=='production'&&<HistoryPage key={page} kind={page} revision={revision} catalog={catalog} settings={settings} canWrite={canWrite} owner={owner} open={open} onDetail={id=>setSelected({kind:page,id})} onEditSale={handleStartEditSale}/>}
-    {page==='production'&&owner&&<Card><SectionTitle title="Product configuration" subtitle="Manage brick sizes and bricks per line. Product changes never add stock."/><Button onClick={()=>open('product')}>Configure a product</Button>{catalog.products.map(p=><div className="product-footer" key={p.id}><span>{p.code} · {p.name} · {p.default_quantity||'—'} bricks/line</span><Button variant="secondary" onClick={()=>open('product',p)}>Edit configuration</Button></div>)}<details><summary>Authorized stock corrections</summary><p>Verified opening balances and corrections require a reason and an owner account.</p>{catalog.products.filter(p=>p.is_stocked).map(p=><Button key={p.id} variant="secondary" onClick={()=>open('adjustment',{product_id:p.id})}>{p.code} · adjustment</Button>)}</details></Card>}{page==='reports'&&<Reports settings={settings} revision={revision} owner={owner}/>}
+  return (
+    <>
+      {page === 'dashboard' ? (
+        <div className="dashboard-content">
+          <div className="dashboard-banner">
+            <div className="dashboard-banner-left">
+              <div className="dashboard-greeting-eyebrow">
+                <span>{getGreeting()}</span>
+              </div>
+              <h1 className="dashboard-greeting-title">Welcome to JM BRICKS Business Manager</h1>
+              <p className="dashboard-greeting-sub">Monitor daily production, track live sales, manage brick inventory and operations.</p>
+            </div>
+            <div className="dashboard-banner-right">
+              <div className="dashboard-date-badge">
+                <CalendarDays size={18} color="#176B48" />
+                <span>{formatDashboardDate(today(settings.timezone), settings.timezone)}</span>
+              </div>
+              <Button variant="secondary" className="dashboard-refresh-btn" onClick={() => setRevision(v => v + 1)}>
+                <RefreshCw size={15} />
+                <span>Refresh Data</span>
+              </Button>
+            </div>
+          </div>
+
+          <div className="quick-actions-bar">
+            <span className="quick-actions-label">QUICK ACTIONS</span>
+            <div className="quick-actions-btns">
+              <Button variant="primary" disabled={!canWrite} onClick={() => open('sale')}>
+                <ShoppingBag size={16} />
+                <span>New Sale</span>
+              </Button>
+              <Button variant="secondary" disabled={!canWrite} onClick={() => open('purchase')}>
+                <ShoppingCart size={16} />
+                <span>Purchase Raw Material</span>
+              </Button>
+              <Button variant="secondary" disabled={!canWrite} onClick={() => open('production')}>
+                <Factory size={16} />
+                <span>Add Production</span>
+              </Button>
+              <Button variant="secondary" disabled={!canWrite} onClick={() => open('expense')}>
+                <Wallet size={16} />
+                <span>Add Expense</span>
+              </Button>
+            </div>
+          </div>
+
+          {message && <div className="notice" role="status">{message}</div>}
+          {!settings.costing_confirmed && (
+            <div className="notice">
+              Before entering stock or sales, the owner must confirm inventory costing in <Link className="text-link" to="/settings">Settings</Link>.
+            </div>
+          )}
+
+          <LiveDashboard settings={settings} revision={revision} onDetail={setSelected} />
+          <ProductionOverview settings={settings} revision={revision} />
+        </div>
+      ) : (
+        <>
+          <div className="operations-heading">
+            <div>
+              <span className="eyebrow">{page === 'stock' ? 'INVENTORY' : page.toUpperCase()}</span>
+              <h1>{page === 'stock' ? 'Stock Management' : formats[page]?.title || (page === 'production' ? 'Production Register' : 'Reports')}</h1>
+              <p>{page === 'production' ? 'Record daily brick production and automatically sync cement stock.' : `Live business records · ${displayDate(today(settings.timezone))}`}</p>
+            </div>
+            <Button variant="secondary" onClick={() => setRevision(v => v + 1)}>
+              <RefreshCw size={15} />
+              <span>Refresh</span>
+            </Button>
+          </div>
+          {message && <div className="notice" role="status">{message}</div>}
+          {!settings.costing_confirmed && (
+            <div className="notice">
+              Before entering stock or sales, the owner must confirm inventory costing in <Link className="text-link" to="/settings">Settings</Link>.
+            </div>
+          )}
+        </>
+      )}
+      {page === 'stock' && <StockPage catalog={catalog} settings={settings} owner={owner} open={open} onHistory={setStockHistory} />}
+      {(page === 'production' || productionNew) && <Production catalog={catalog} settings={settings} profile={profile} revision={revision} onChanged={() => setRevision(v => v + 1)} openNew={productionNew} onOpened={() => setProductionNew(false)} />}
+      {formats[page] && page !== 'production' && <HistoryPage key={page} kind={page} revision={revision} catalog={catalog} settings={settings} canWrite={canWrite} owner={owner} open={open} onDetail={id => setSelected({ kind: page, id })} onEditSale={handleStartEditSale} />}
+      {page === 'production' && owner && (
+        <Card className="product-config-card" style={{ marginTop: '24px' }}>
+          <SectionTitle title="Product Configuration" subtitle="Manage brick sizes and bricks per line. Product changes never add stock." />
+          <div style={{ padding: '0 24px 24px' }}>
+            <Button onClick={() => open('product')}>Configure a Product</Button>
+            <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {catalog.products.map(p => (
+                <div className="product-footer" key={p.id}>
+                  <span><strong>{p.code}</strong> · {p.name} · {p.default_quantity || '—'} bricks/line</span>
+                  <Button variant="secondary" onClick={() => open('product', p)}>Edit Configuration</Button>
+                </div>
+              ))}
+            </div>
+            <details style={{ marginTop: '16px' }}>
+              <summary style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--primary)' }}>Authorized Stock Corrections</summary>
+              <p className="help" style={{ margin: '8px 0 12px' }}>Verified opening balances and corrections require a reason and an owner account.</p>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {catalog.products.filter(p => p.is_stocked).map(p => (
+                  <Button key={p.id} variant="secondary" onClick={() => open('adjustment', { product_id: p.id })}>{p.code} · Adjustment</Button>
+                ))}
+              </div>
+            </details>
+          </div>
+        </Card>
+      )}
+      {page === 'reports' && <Reports settings={settings} revision={revision} owner={owner} />}
     {modal&&!pending&&<OperationForm key={`${modal.kind}-${modal.initial.id||''}`} {...modal} catalog={catalog} settings={settings} busy={busy} error={saveError} onSubmit={submit} onClose={()=>setModal(null)} onCustomerUpdate={cust => {
       if (cust) {
         if (cust._deleted) {
@@ -148,7 +270,7 @@ export default function Operations({profile,settings}) {
     {pending&&<Dialog title="Submission status" onClose={clearPending}><p>{busy?'Saving your entry…':'This entry needs confirmation. Keep its request ID and retry the original submission if the connection was interrupted.'}</p><div className="notice">{titles[pending.kind]}<br/>Request: {pending.id}</div>{saveError&&<div className="auth-error" role="alert">{saveError}</div>}<div className="dialog-actions"><Button variant="secondary" onClick={clearPending}>Dismiss</Button><Button variant="secondary" disabled={busy} onClick={checkPending}>Check saved status</Button><Button disabled={busy} onClick={()=>send(pending)}>{busy?'Please wait…':'Retry original entry'}</Button></div></Dialog>}
     {selected&&!modal&&!pending&&<TransactionDetail key={`${selected.kind}-${selected.id}-${revision}`} {...selected} catalog={catalog} settings={settings} canWrite={canWrite} owner={owner} onClose={()=>setSelected(null)} onPayment={open} onEditSale={handleStartEditSale}/>}
     {stockHistory&&!modal&&!pending&&<MovementHistory product={stockHistory} onClose={()=>setStockHistory(null)}/>}
-  </>;
+  </>);
 }
 function StockPage({catalog,settings,owner,open,onHistory}){
  const [search,setSearch]=useState(''),[filter,setFilter]=useState('all');
