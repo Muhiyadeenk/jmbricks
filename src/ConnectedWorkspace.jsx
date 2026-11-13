@@ -108,14 +108,14 @@ export default function ConnectedWorkspace() {
             </div>
           </div>
           <div className="header-right">
-            <div className="header-profile">
-              <span className="avatar small">{userInitials}</span>
-              <div className="header-profile-info">
-                <strong>{profile.display_name || 'Team member'}</strong>
-                <small>{profile.role === 'owner' ? 'Owner' : profile.role}</small>
-              </div>
-            </div>
-            <Button variant="secondary" className="header-signout-btn" disabled={signingOut} onClick={logout}>
+            <span
+              className="avatar small header-avatar"
+              title={`${profile.display_name || 'Team member'} (${profile.role === 'owner' ? 'Business Owner' : profile.role || 'Staff'})`}
+              aria-label={`${profile.display_name || 'Team member'} profile`}
+            >
+              {userInitials}
+            </span>
+            <Button variant="secondary" className="header-signout-btn" disabled={signingOut} onClick={logout} title="Sign out of JM BRICKS">
               <LogOut size={15} />
               <span>{signingOut ? 'Signing out…' : 'Sign out'}</span>
             </Button>
