@@ -20,12 +20,12 @@ const newItem = () => ({
   size: '',
   default_quantity: '',
   production_lines: '',
-  count_1: '0',
-  count_2: '0',
-  count_3: '0',
+  count_1: '',
+  count_2: '',
+  count_3: '',
   actual_quantity: '',
-  rejected_quantity: '0',
-  cement_packs_used: '0',
+  rejected_quantity: '',
+  cement_packs_used: '',
   line_reading: '',
   starting_line_reading: '',
   ending_line_reading: '',
@@ -354,12 +354,22 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
         if (n !== i) return r;
         const updated = { ...r, [k]: v };
         if (k === 'production_lines') {
-          const lines = Number(v) || 0;
-          updated.actual_quantity = lines * Number(r.default_quantity || 0);
-          const autoCement = calculateCementConsumption(r.size, lines);
+          const lines = Number(v);
+          const factor = Number(r.default_quantity);
+          if (v !== '' && !isNaN(lines) && lines > 0 && !isNaN(factor) && factor > 0) {
+            updated.actual_quantity = lines * factor;
+          } else {
+            updated.actual_quantity = '';
+          }
           if (r.cement_packs_used === '' || r.cement_packs_used === '0' || r._autoCement) {
-            updated.cement_packs_used = String(autoCement);
-            updated._autoCement = true;
+            if (v !== '' && !isNaN(lines) && lines > 0 && r.size) {
+              const autoCement = calculateCementConsumption(r.size, lines);
+              updated.cement_packs_used = autoCement > 0 ? String(autoCement) : '';
+              updated._autoCement = true;
+            } else {
+              updated.cement_packs_used = '';
+              updated._autoCement = true;
+            }
           }
         }
         if (k === 'cement_packs_used') {
@@ -383,23 +393,30 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
     const status = e.nativeEvent.submitter?.value || data.status;
 
     for (const r of data.items) {
+      if (!r.size) {
+        setLocalError('Select a brick size for every row.');
+        return;
+      }
+      if (r.production_lines === '' || !Number.isSafeInteger(Number(r.production_lines)) || Number(r.production_lines) <= 0) {
+        setLocalError('Enter a positive whole number of production lines.');
+        return;
+      }
       // Validate Count 1, 2, 3
       for (const k of ['count_1', 'count_2', 'count_3']) {
-        const v = Number(r[k] ?? 0);
+        const val = r[k];
+        const v = val === '' || val === null || val === undefined ? 0 : Number(val);
         if (!Number.isSafeInteger(v) || v < 0 || v > 1_000_000_000) {
           setLocalError('Counts must be whole numbers between 0 and 1,000,000,000.');
           return;
         }
       }
-      if (!Number.isSafeInteger(Number(r.production_lines)) || Number(r.production_lines) <= 0) {
-        setLocalError('Enter a positive whole number of production lines.');
-        return;
-      }
-      if (Number(r.rejected_quantity) > Number(r.actual_quantity)) {
+      const actualQty = Number(r.actual_quantity || 0);
+      const rejectedQty = Number(r.rejected_quantity || 0);
+      if (rejectedQty > actualQty) {
         setLocalError('Rejected bricks cannot exceed actual production.');
         return;
       }
-      if (status === 'completed' && Number(r.actual_quantity) <= 0) {
+      if (status === 'completed' && actualQty <= 0) {
         setLocalError('Enter actual production for every row.');
         return;
       }
@@ -426,7 +443,19 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
       }
     }
 
-    setReview({ ...data, status });
+    const payloadItems = data.items.map(r => ({
+      ...r,
+      count_1: r.count_1 === '' || r.count_1 === null || r.count_1 === undefined ? 0 : Number(r.count_1),
+      count_2: r.count_2 === '' || r.count_2 === null || r.count_2 === undefined ? 0 : Number(r.count_2),
+      count_3: r.count_3 === '' || r.count_3 === null || r.count_3 === undefined ? 0 : Number(r.count_3),
+      production_lines: Number(r.production_lines || 0),
+      default_quantity: Number(r.default_quantity || 0),
+      actual_quantity: Number(r.actual_quantity || 0),
+      rejected_quantity: r.rejected_quantity === '' || r.rejected_quantity === null || r.rejected_quantity === undefined ? 0 : Number(r.rejected_quantity),
+      cement_packs_used: r.cement_packs_used === '' || r.cement_packs_used === null || r.cement_packs_used === undefined ? 0 : Number(r.cement_packs_used),
+    }));
+
+    setReview({ ...data, items: payloadItems, status });
   }
 
   const net = data.items.reduce((s, r) => s + Number(r.actual_quantity || 0) - Number(r.rejected_quantity || 0), 0);
@@ -556,20 +585,24 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
                           p => p.is_active && p.kind === 'finished_brick' && Number(p.brick_size) === Number(size)
                         );
                         // Auto-set bricks per line and recalculate total
-                        const factor = defaults[size] || '';
-                        const lines = Number(r.production_lines || 0);
-                        const autoCement = calculateCementConsumption(size, lines);
+                        const factor = defaults[size] !== undefined ? defaults[size] : '';
+                        const lines = Number(r.production_lines);
+                        const hasLines = r.production_lines !== '' && !isNaN(lines) && lines > 0;
+                        const hasFactor = factor !== '' && Number(factor) > 0;
+                        const autoCement = (hasLines && size) ? calculateCementConsumption(size, lines) : 0;
                         setData(d => ({
                           ...d,
-                          items: d.items.map((r, n) =>
-                            n !== i ? r : {
-                              ...r,
+                          items: d.items.map((rowItem, n) =>
+                            n !== i ? rowItem : {
+                              ...rowItem,
                               size,
                               product_id:       product?.id || '',
                               default_quantity: factor,
-                              actual_quantity:  lines * Number(factor),
-                              cement_packs_used: (r.cement_packs_used === '' || r.cement_packs_used === '0' || r._autoCement) ? String(autoCement) : r.cement_packs_used,
-                              _autoCement: (r.cement_packs_used === '' || r.cement_packs_used === '0' || r._autoCement)
+                              actual_quantity:  (hasLines && hasFactor) ? (lines * Number(factor)) : '',
+                              cement_packs_used: (hasLines && autoCement > 0)
+                                ? ((rowItem.cement_packs_used === '' || rowItem.cement_packs_used === '0' || rowItem._autoCement) ? String(autoCement) : rowItem.cement_packs_used)
+                                : (rowItem._autoCement ? '' : rowItem.cement_packs_used),
+                              _autoCement: (rowItem.cement_packs_used === '' || rowItem.cement_packs_used === '0' || rowItem._autoCement)
                             }
                           ),
                         }));
@@ -597,12 +630,12 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
                 {/* Core production fields */}
                 <div className="form-grid">
                   {[
-                    ['production_lines', 'Number of Production Lines', 1],
-                    ['default_quantity', 'Bricks Per Line (auto)',      1],
-                    ['actual_quantity',  'Total Bricks Produced (auto)', 0],
-                    ['rejected_quantity','Damaged / Rejected Bricks',   0],
-                    ['cement_packs_used','Cement Sacks Used',           0],
-                  ].map(([k, l, min]) => (
+                    ['production_lines', 'Number of Production Lines',   1, false, 'e.g. 100', true],
+                    ['default_quantity', 'Bricks Per Line (auto)',        1, true,  'Select size', false],
+                    ['actual_quantity',  'Total Bricks Produced (auto)',   0, true,  'Auto calculated', false],
+                    ['rejected_quantity','Damaged / Rejected Bricks',     0, false, '0', false],
+                    ['cement_packs_used','Cement Sacks Used',             0, false, 'Auto calculated', false],
+                  ].map(([k, l, min, isReadOnly, placeholder, isRequired]) => (
                     <Field
                       key={k}
                       label={l}
@@ -610,8 +643,9 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
                       min={min}
                       max="1000000000"
                       step="1"
-                      readOnly={k === 'default_quantity' || k === 'actual_quantity'}
-                      required
+                      placeholder={placeholder}
+                      readOnly={isReadOnly}
+                      required={isRequired}
                       value={r[k] ?? ''}
                       onChange={e => row(i, k, e.target.value)}
                     />
@@ -634,7 +668,8 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
                         min="0"
                         max="1000000000"
                         step="1"
-                        value={r[`count_${n}`] ?? 0}
+                        placeholder="0"
+                        value={r[`count_${n}`] ?? ''}
                         onChange={e => row(i, `count_${n}`, e.target.value)}
                       />
                     ))}
@@ -643,10 +678,10 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
 
                 {/* Row summary */}
                 <p className="help">
-                  {r.size}-inch · {number(r.production_lines || 0)} lines × {number(r.default_quantity || 0)} = {number(r.actual_quantity || 0)} bricks · {number(r.cement_packs_used || 0)} cement sacks
+                  {r.size ? `${r.size}-inch · ` : ''}{number(r.production_lines || 0)} lines × {number(r.default_quantity || 0)} = {number(r.actual_quantity || 0)} bricks · {number(r.cement_packs_used || 0)} cement sacks
                 </p>
                 <div className="line-footer">
-                  <strong>Net production: {number(Number(r.actual_quantity || 0) - Number(r.rejected_quantity || 0))}</strong>
+                  <strong>Net production: {number(Math.max(0, Number(r.actual_quantity || 0) - Number(r.rejected_quantity || 0)))}</strong>
                   {data.items.length > 1 && (
                     <Button type="button" variant="secondary" onClick={() => set('items', data.items.filter((_, n) => n !== i))}>
                       Remove row

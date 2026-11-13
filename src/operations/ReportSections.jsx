@@ -1213,3 +1213,4 @@ export function ComparisonSection({ data, prevData, deltas, periodDates, setting
     </div>
   );
 }
+

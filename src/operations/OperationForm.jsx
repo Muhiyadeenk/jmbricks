@@ -16,7 +16,7 @@ export default function OperationForm({kind,initial={},catalog,settings,onSubmit
     return <SaleForm initial={initial} catalog={catalog} settings={settings} onSubmit={onSubmit} onClose={onClose} busy={busy} error={error} onCustomerUpdate={onCustomerUpdate} />;
   }
   const isTrade=['sale','purchase'].includes(kind),isPayment=kind.endsWith('_payment');
-  const [data,setData]=useState(()=>({date:today(settings.timezone),name:'',phone:'',contact_id:'',product_id:'',quantity:'',rejected:'0',paid:'0',discount:'0',payment_method:'cash',notes:'',category_id:'',description:'',amount:'',direction:'add',reason:'',cost:null,...initial}));
+  const [data,setData]=useState(()=>({date:today(settings.timezone),name:'',phone:'',contact_id:'',product_id:'',quantity:'',rejected:'',paid:'0',discount:'0',payment_method:'cash',notes:'',category_id:'',description:'',amount:'',direction:'add',reason:'',cost:null,...initial}));
   const [items,setItems]=useState(initial.items||[{product_id:'',quantity:'',price:''}]);
   const [product,setProduct]=useState(()=>({name:'',code:'',kind:'finished_brick',unit:'brick',is_stocked:true,length_mm:'',width_mm:'',height_mm:'',size_label:'',selling_price:'0',production_cost:null,minimum_stock:'0',is_active:true,...initial}));
   const [review,setReview]=useState(null),[localError,setLocalError]=useState('');
