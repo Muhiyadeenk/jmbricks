@@ -114,7 +114,7 @@ export default function SalesInvoice({
   const [isDownloading, setIsDownloading] = useState(false);
   const [desktopPrompt, setDesktopPrompt] = useState(null);
 
-  const { userNotes, primaryLocation, extraLocations } = useMemo(() => {
+  const { userNotes, primaryLocation, extraLocations, itemLocations } = useMemo(() => {
     return parseDeliveryLocations(record.notes);
   }, [record.notes]);
 
@@ -129,6 +129,7 @@ export default function SalesInvoice({
     customerLocation,
     primaryLocation,
     extraLocations,
+    itemLocations,
     cleanNotes: userNotes,
     subtotal,
     discount,
@@ -146,6 +147,7 @@ export default function SalesInvoice({
     customerLocation,
     primaryLocation,
     extraLocations,
+    itemLocations,
     userNotes,
     subtotal,
     discount,
@@ -206,6 +208,7 @@ export default function SalesInvoice({
     customerLocation,
     primaryLocation,
     extraLocations,
+    itemLocations,
     cleanNotes: userNotes,
     currencyCode,
     subtotal,
@@ -334,6 +337,7 @@ function InvoiceSheet({
   customerLocation,
   primaryLocation,
   extraLocations,
+  itemLocations = [],
   cleanNotes,
   currencyCode,
   subtotal,
@@ -397,10 +401,18 @@ function InvoiceSheet({
               <span><strong>Phone:</strong> {customerPhone}</span>
             </div>
           )}
-          {extraLocations && extraLocations.length > 0 && (
+          {((extraLocations && extraLocations.length > 0) || (itemLocations && itemLocations.length > 0)) && (
             <div className="info-detail-item" style={{ marginTop: '2px' }}>
               <MapPin size={13} className="info-icon" color="#1a6640" />
-              <span><strong>Delivery Sites:</strong> {[primaryLocation || customerLocation, ...extraLocations.map(l => l.location)].filter(Boolean).join(', ')}</span>
+              <span>
+                <strong>Delivery Sites: </strong>
+                {Array.from(new Set([
+                  primaryLocation,
+                  customerLocation,
+                  ...(itemLocations || []).map(l => l.location),
+                  ...(extraLocations || []).map(l => l.location)
+                ].filter(Boolean))).join(', ')}
+              </span>
             </div>
           )}
         </div>
@@ -529,6 +541,14 @@ function InvoiceSheet({
                       <td>
                         <strong className="item-title">{brickSizeLabel}</strong>
                         {prod?.code && <small className="item-sub"> · Code: {prod.code}</small>}
+                        {(() => {
+                          const itLoc = item.location || (itemLocations && itemLocations.find(l => l.product_id === item.product_id)?.location);
+                          return itLoc ? (
+                            <div style={{ fontSize: '11px', color: '#1a6640', fontWeight: 600, marginTop: '2px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              <MapPin size={11} /> {itLoc}
+                            </div>
+                          ) : null;
+                        })()}
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 600 }}>
                         {qty.toLocaleString('en-IN')} <span style={{ fontSize: '11px', color: '#687e70', fontWeight: 400 }}>nos</span>

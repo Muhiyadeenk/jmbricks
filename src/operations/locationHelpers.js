@@ -2,12 +2,13 @@
 
 export function parseDeliveryLocations(notes) {
   if (!notes || typeof notes !== 'string') {
-    return { userNotes: '', primaryLocation: '', extraLocations: [] };
+    return { userNotes: '', primaryLocation: '', extraLocations: [], itemLocations: [] };
   }
 
   let userNotes = notes;
   let primaryLocation = '';
   let extraLocations = [];
+  let itemLocations = [];
 
   // 1. Try parsing embedded structured JSON comment
   const jsonMatch = notes.match(/<!--LOCATIONS_DATA:(.*?)-->/s);
@@ -22,6 +23,7 @@ export function parseDeliveryLocations(notes) {
       } else if (parsed && typeof parsed === 'object') {
         primaryLocation = parsed.primaryLocation || '';
         extraLocations = parsed.extraLocations || [];
+        itemLocations = parsed.itemLocations || [];
       }
       userNotes = userNotes.replace(jsonMatch[0], '').trim();
     } catch (e) {
@@ -41,17 +43,26 @@ export function parseDeliveryLocations(notes) {
     userNotes = parts[0]?.replace(/·\s*$/, '').trim() || '';
   }
 
-  return { userNotes, primaryLocation, extraLocations };
+  return { userNotes, primaryLocation, extraLocations, itemLocations };
 }
 
-export function formatSaleNotesWithLocations(userNotes, primaryLocation, extraLocations, availableBricks = []) {
+export function formatSaleNotesWithLocations(userNotes, primaryLocation, extraLocations, availableBricks = [], itemLocations = []) {
   const cleanUserNotes = (userNotes || '').trim();
   const validExtra = (extraLocations || []).filter(
     loc => (loc.location && loc.location.trim()) || loc.product_id || Number(loc.quantity) > 0
   );
 
-  // If no additional locations, maintain existing simple format
-  if (validExtra.length === 0) {
+  const validItemLocs = (itemLocations || [])
+    .filter(it => it && it.product_id && it.location && it.location.trim())
+    .map(it => ({
+      product_id: it.product_id,
+      location: it.location.trim(),
+      quantity: it.quantity ? String(it.quantity) : '',
+      price: it.price ? String(it.price) : ''
+    }));
+
+  // If no additional locations and no per-item locations, maintain existing simple format
+  if (validExtra.length === 0 && validItemLocs.length === 0) {
     if (primaryLocation && primaryLocation.trim()) {
       return [cleanUserNotes, `📍 Location: ${primaryLocation.trim()}`].filter(Boolean).join(' · ');
     }
@@ -60,14 +71,22 @@ export function formatSaleNotesWithLocations(userNotes, primaryLocation, extraLo
 
   // Multiple locations: create clear human-readable section + structured payload
   const readableLines = ['📍 Delivery Locations:'];
-  if (primaryLocation && primaryLocation.trim()) {
+
+  if (validItemLocs.length > 0) {
+    validItemLocs.forEach(it => {
+      const p = availableBricks.find(b => b.id === it.product_id);
+      const pName = p?.size_label || (p?.brick_size ? `${p.brick_size} inch` : '') || p?.name || 'Finished Brick';
+      const qty = it.quantity ? ` – ${Number(it.quantity).toLocaleString('en-IN')} bricks` : '';
+      readableLines.push(`• ${pName}${qty}: ${it.location}`);
+    });
+  } else if (primaryLocation && primaryLocation.trim()) {
     readableLines.push(`• Location 1 (${primaryLocation.trim()})`);
   }
 
   validExtra.forEach((loc, idx) => {
     const p = availableBricks.find(b => b.id === loc.product_id);
     const pName = p?.size_label || (p?.brick_size ? `${p.brick_size} inch` : '') || p?.name || 'Finished Brick';
-    const locNum = primaryLocation ? idx + 2 : idx + 1;
+    const locNum = (validItemLocs.length > 0 ? validItemLocs.length : (primaryLocation ? 1 : 0)) + idx + 1;
     const qty = Number(loc.quantity || 0).toLocaleString('en-IN');
     const rate = Number(loc.price || 0);
     const amt = (Number(loc.quantity || 0) * rate).toLocaleString('en-IN');
@@ -83,7 +102,8 @@ export function formatSaleNotesWithLocations(userNotes, primaryLocation, extraLo
       quantity: String(loc.quantity || '0'),
       price: String(loc.price || '0'),
       amount: (Number(loc.quantity) || 0) * (Number(loc.price) || 0)
-    }))
+    })),
+    itemLocations: validItemLocs
   });
 
   const parts = [
@@ -107,7 +127,7 @@ export function formatWhatsAppInvoiceMessage({
   outstanding = 0,
   catalog = {}
 }) {
-  const { primaryLocation, extraLocations } = parseDeliveryLocations(record.notes);
+  const { primaryLocation, extraLocations, itemLocations } = parseDeliveryLocations(record.notes);
   const invNumber = record.receipt_number ? `S-${record.receipt_number}` : (record.id ? `S-${record.id.slice(0, 8)}` : 'Sale');
   const invDate = record.sale_date || '';
 
@@ -153,8 +173,8 @@ export function formatWhatsAppInvoiceMessage({
       lines.push(`  • ${name}: ${qty} bricks @ ₹${rate} = ₹${amt}`);
     });
   } else {
-    // Single Location
-    if (primaryLocation) {
+    // Single Location or per-item locations
+    if (primaryLocation && (!itemLocations || itemLocations.length === 0)) {
       lines.push(`*Delivery Place:* ${primaryLocation}`);
     }
     lines.push(`----------------------------------------`);
@@ -165,7 +185,9 @@ export function formatWhatsAppInvoiceMessage({
       const qty = Number(it.quantity || 0).toLocaleString('en-IN');
       const rate = Number(it.unit_price ?? it.price ?? 0);
       const amt = (Number(it.quantity || 0) * rate).toLocaleString('en-IN');
-      lines.push(`• ${name}: ${qty} bricks @ ₹${rate} = ₹${amt}`);
+      const itLoc = (itemLocations && itemLocations.find(l => l.product_id === it.product_id)?.location) || it.location;
+      const locTag = itLoc ? ` [📍 ${itLoc}]` : '';
+      lines.push(`• ${name}${locTag}: ${qty} bricks @ ₹${rate} = ₹${amt}`);
     });
   }
 

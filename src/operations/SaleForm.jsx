@@ -163,18 +163,32 @@ export default function SaleForm({
 
   // Sale Items
   const [items, setItems] = useState(() => {
-    if (initial.items && initial.items.length > 0) return initial.items;
+    if (initial.items && initial.items.length > 0) {
+      return initial.items.map(it => ({
+        product_id: it.product_id || '',
+        quantity: it.quantity != null ? String(it.quantity) : '',
+        price: it.price != null ? String(it.price) : '',
+        location: it.location || ''
+      }));
+    }
     const firstBrick = availableBricks[0];
     return [{
       product_id: firstBrick?.id || '',
       quantity: '',
-      price: firstBrick ? String(firstBrick.selling_price || '') : ''
+      price: firstBrick ? String(firstBrick.selling_price || '') : '',
+      location: ''
     }];
   });
 
-  // Financials
-  const [discount, setDiscount] = useState(() => initial.discount ? String(initial.discount) : '0');
-  const [amountPaid, setAmountPaid] = useState(() => initial.paid ? String(initial.paid) : '');
+  // Financials - optional discount and payment default to empty string
+  const [discount, setDiscount] = useState(() => {
+    if (initial.discount && Number(initial.discount) > 0) return String(initial.discount);
+    return '';
+  });
+  const [amountPaid, setAmountPaid] = useState(() => {
+    if (initial.paid && Number(initial.paid) > 0) return String(initial.paid);
+    return '';
+  });
   const [paymentMethod, setPaymentMethod] = useState(() => initial.payment_method || 'cash');
   const [notes, setNotes] = useState(() => initial.notes || '');
 
@@ -303,7 +317,8 @@ export default function SaleForm({
     setItems(old => [...old, {
       product_id: target?.id || '',
       quantity: '',
-      price: target ? String(target.selling_price || '0') : ''
+      price: target ? String(target.selling_price || '0') : '',
+      location: ''
     }]);
   }
 
@@ -719,7 +734,17 @@ export default function SaleForm({
       return;
     }
 
-    // Prepare review payload
+    // Prepare review payload with individual item delivery locations
+    const resolvedItemLocations = items.map(it => {
+      const effLoc = (it.location && it.location.trim()) || deliveryLocation.trim() || selectedCustomer?.location || selectedCustomer?.place || selectedCustomer?.address || '';
+      return {
+        product_id: it.product_id,
+        location: effLoc,
+        quantity: it.quantity,
+        price: it.price
+      };
+    });
+
     setReview({
       date,
       contact_id: selectedCustomerId,
@@ -727,7 +752,11 @@ export default function SaleForm({
       customerPhone: selectedCustomer?.phone || '',
       customerLocation: selectedCustomer?.location || selectedCustomer?.place || selectedCustomer?.address || '',
       deliveryLocation: deliveryLocation.trim() || selectedCustomer?.location || selectedCustomer?.place || selectedCustomer?.address || '',
-      items,
+      items: items.map(it => ({
+        ...it,
+        effectiveLocation: (it.location && it.location.trim()) || deliveryLocation.trim() || selectedCustomer?.location || selectedCustomer?.place || selectedCustomer?.address || ''
+      })),
+      itemLocations: resolvedItemLocations,
       extraLocations,
       discount: discount || '0',
       paid: amountPaid || '0',
@@ -746,7 +775,8 @@ export default function SaleForm({
       review.notes,
       review.deliveryLocation || review.customerLocation,
       review.extraLocations,
-      availableBricks
+      availableBricks,
+      review.itemLocations
     );
 
     // Merge line items by product_id for database storage & stock movements
@@ -812,14 +842,20 @@ export default function SaleForm({
           <dd>
             {review.deliveryLocation && (
               <div style={{ fontWeight: 700, color: '#1a6640', marginBottom: '4px' }}>
-                📍 Location 1: {review.deliveryLocation}
+                📍 Default Delivery: {review.deliveryLocation}
               </div>
             )}
             {review.items.map((it, idx) => {
               const p = availableBricks.find(b => b.id === it.product_id);
+              const customLoc = it.location?.trim();
               return (
                 <div key={idx} style={{ fontSize: '14px', marginBottom: '4px', paddingLeft: review.deliveryLocation ? '10px' : '0' }}>
                   <strong>{it.quantity} bricks</strong> of {p?.name || 'Brick'} @ {currency(it.price, settings.currency)}
+                  {customLoc && (
+                    <span style={{ display: 'inline-block', marginLeft: '6px', fontSize: '12.5px', color: '#1a6640', fontWeight: 600, background: '#eaf4ee', padding: '1px 6px', borderRadius: '4px' }}>
+                      📍 {customLoc}
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -1336,6 +1372,18 @@ export default function SaleForm({
                       />
                     </div>
 
+                    <div style={{ marginTop: '10px' }}>
+                      <Field label="Delivery Location (Optional)">
+                        <input
+                          type="text"
+                          placeholder={deliveryLocation ? `Defaults to: ${deliveryLocation}` : "e.g. Site address, Malappuram (optional)"}
+                          value={item.location || ''}
+                          onChange={e => updateItem(idx, 'location', e.target.value)}
+                          style={{ minHeight: '38px', fontSize: '13.5px' }}
+                        />
+                      </Field>
+                    </div>
+
                     <div className="line-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', borderTop: '1px dashed #e2ede4', paddingTop: '8px' }}>
                       <small style={{ color: '#4a6252', fontSize: '12.5px' }}>
                         {prod ? `Yard stock: ${prod.available_quantity || 0} bricks` : 'Select a brick size'}
@@ -1495,7 +1543,7 @@ export default function SaleForm({
                 min="0"
                 step="0.01"
                 value={discount}
-                placeholder="0.00"
+                placeholder="Enter discount (optional)"
                 onChange={e => setDiscount(e.target.value)}
               />
 
@@ -1505,7 +1553,7 @@ export default function SaleForm({
                 min="0"
                 step="0.01"
                 value={amountPaid}
-                placeholder="0.00"
+                placeholder="Enter received amount (optional)"
                 onChange={e => setAmountPaid(e.target.value)}
               />
             </div>

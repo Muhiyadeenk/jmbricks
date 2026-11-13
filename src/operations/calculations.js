@@ -14,7 +14,7 @@ export function lineCents(quantity,price) {
 }
 export function totals(items,discount='0',paid='0') {
   const lines=items.map(item=>lineCents(item.quantity,item.price));
-  const d=cents(discount),p=cents(paid);
+  const d=cents(discount===''||discount==null?'0':discount),p=cents(paid===''||paid==null?'0':paid);
   if(lines.includes(null)||d===null||p===null)return null;
   const subtotal=lines.reduce((a,b)=>a+b,0n), total=subtotal-d;
   return {subtotal:Number(subtotal)/100,total:Number(total)/100,balance:Number(total-p)/100,valid:d<=subtotal&&p<=total};

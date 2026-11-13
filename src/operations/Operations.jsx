@@ -107,7 +107,7 @@ export default function Operations({profile,settings}) {
       const saleData = await detail('sales', saleId);
       if (!saleData || !saleData.record) throw new Error('Sale record could not be loaded.');
 
-      const { userNotes, primaryLocation, extraLocations } = parseDeliveryLocations(saleData.record.notes || '');
+      const { userNotes, primaryLocation, extraLocations, itemLocations } = parseDeliveryLocations(saleData.record.notes || '');
 
       setModal({
         kind: 'edit_sale',
@@ -122,15 +122,21 @@ export default function Operations({profile,settings}) {
           customerLocation: primaryLocation || '',
           deliveryLocation: primaryLocation || '',
           extraLocations: extraLocations || [],
-          discount: saleData.record.discount != null ? String(saleData.record.discount) : '0',
-          paid: saleData.payments?.[0]?.amount != null ? String(saleData.payments[0].amount) : (saleData.record.amount_received != null ? String(saleData.record.amount_received) : '0'),
+          discount: saleData.record.discount != null && Number(saleData.record.discount) > 0 ? String(saleData.record.discount) : '',
+          paid: saleData.payments?.[0]?.amount != null && Number(saleData.payments[0].amount) > 0
+            ? String(saleData.payments[0].amount)
+            : (saleData.record.amount_received != null && Number(saleData.record.amount_received) > 0 ? String(saleData.record.amount_received) : ''),
           payment_method: saleData.payments?.[0]?.payment_method || 'cash',
           notes: userNotes,
-          items: (saleData.items || []).map(i => ({
-            product_id: i.product_id,
-            quantity: String(i.quantity),
-            price: String(i.unit_price)
-          })),
+          items: (saleData.items || []).map(i => {
+            const locMatch = itemLocations?.find(l => l.product_id === i.product_id);
+            return {
+              product_id: i.product_id,
+              quantity: String(i.quantity),
+              price: String(i.unit_price),
+              location: locMatch?.location || ''
+            };
+          }),
           originalSale: saleData
         }
       });
@@ -693,7 +699,7 @@ function TransactionDetail({kind,id,catalog,settings,canWrite,owner,onClose,onPa
                 onClick={async () => {
                   setPdfBusy(true);
                   try {
-                    const { userNotes, primaryLocation, extraLocations } = parseDeliveryLocations(data.record.notes || '');
+                    const { userNotes, primaryLocation, extraLocations, itemLocations } = parseDeliveryLocations(data.record.notes || '');
                     await shareInvoiceViaWhatsApp({
                       record: data.record,
                       items: data.items,
@@ -703,6 +709,7 @@ function TransactionDetail({kind,id,catalog,settings,canWrite,owner,onClose,onPa
                       customerLocation: data.record.customer_location,
                       primaryLocation,
                       extraLocations,
+                      itemLocations,
                       cleanNotes: userNotes,
                       subtotal: data.record.subtotal,
                       discount: data.record.discount,

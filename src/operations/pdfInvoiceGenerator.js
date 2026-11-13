@@ -259,9 +259,14 @@ export function buildInvoicePdfBytes(data, logoData = null) {
     text(`Phone: ${custPhone}`, marginL + 10, custSubY, { size: 8.5, color: '#354d3e' });
     custSubY += 12;
   }
-  if (data.extraLocations && data.extraLocations.length > 0) {
-    const locNames = [custLoc, ...data.extraLocations.map(l => l.location)].filter(Boolean).join(', ');
-    text(`Delivery Sites: ${locNames}`, marginL + 10, custSubY, { size: 7.5, bold: true, color: '#1a6640' });
+  const itemLocs = data.itemLocations || (data.record?.notes ? parseDeliveryLocations(data.record.notes).itemLocations : []) || [];
+  const allLocNames = Array.from(new Set([
+    custLoc,
+    ...itemLocs.map(l => l.location),
+    ...(data.extraLocations || []).map(l => l.location)
+  ].filter(Boolean)));
+  if (allLocNames.length > 0 && ((data.extraLocations && data.extraLocations.length > 0) || itemLocs.length > 0)) {
+    text(`Delivery Sites: ${allLocNames.join(', ')}`, marginL + 10, custSubY, { size: 7.5, bold: true, color: '#1a6640' });
   }
 
   // Right card: INVOICE DETAILS
@@ -366,7 +371,11 @@ export function buildInvoicePdfBytes(data, logoData = null) {
   if (items.length > 0) {
     items.forEach((item, i) => {
       const prod = data.catalog?.products?.find(p => p.id === item.product_id);
-      const desc = prod?.size_label || (prod?.brick_size ? `${prod.brick_size} inch Brick` : '') || item.product_name || 'Finished Brick';
+      let desc = prod?.size_label || (prod?.brick_size ? `${prod.brick_size} inch Brick` : '') || item.product_name || 'Finished Brick';
+      const itLoc = item.location || (itemLocs.find(l => l.product_id === item.product_id)?.location);
+      if (itLoc) {
+        desc += ` (${itLoc})`;
+      }
       const rate = Number(item.unit_price ?? item.unit_cost ?? 0);
       const qty = Number(item.quantity || 0);
       const amt = item.line_total != null ? Number(item.line_total) : qty * rate;

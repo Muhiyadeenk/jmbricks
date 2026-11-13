@@ -73,3 +73,29 @@ test('formatWhatsAppInvoiceMessage formats all locations for WhatsApp sharing', 
   assert.match(text, /Location 3: Tirur/);
   assert.match(shareUrl, /wa\.me\/919446663786/);
 });
+
+test('formatSaleNotesWithLocations and parseDeliveryLocations round-trip per-brick item locations', () => {
+  const bricks = [
+    { id: 'b1', name: '8 Inch Hollow', size_label: '8-inch Brick' },
+    { id: 'b2', name: '5 Inch Hollow', size_label: '5-inch Brick' },
+    { id: 'b3', name: '6 Inch Hollow', size_label: '6-inch Brick' },
+  ];
+
+  const itemLocations = [
+    { product_id: 'b1', location: 'Malappuram', quantity: '500', price: '45' },
+    { product_id: 'b2', location: 'Calicut', quantity: '300', price: '38' },
+    { product_id: 'b3', location: 'Tirur', quantity: '200', price: '35' }
+  ];
+
+  const formatted = formatSaleNotesWithLocations('Multiple sites', 'HQ', [], bricks, itemLocations);
+  assert.match(formatted, /📍 Delivery Locations:/);
+  assert.match(formatted, /8-inch Brick – 500 bricks: Malappuram/);
+  assert.match(formatted, /5-inch Brick – 300 bricks: Calicut/);
+  assert.match(formatted, /6-inch Brick – 200 bricks: Tirur/);
+
+  const parsed = parseDeliveryLocations(formatted);
+  assert.equal(parsed.itemLocations.length, 3);
+  assert.equal(parsed.itemLocations[0].location, 'Malappuram');
+  assert.equal(parsed.itemLocations[1].location, 'Calicut');
+  assert.equal(parsed.itemLocations[2].location, 'Tirur');
+});
