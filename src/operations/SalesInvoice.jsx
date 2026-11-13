@@ -5,6 +5,7 @@ import { Button, Dialog } from '../components';
 import { currency } from './api';
 import { parseDeliveryLocations, formatWhatsAppInvoiceMessage } from './locationHelpers';
 import { downloadInvoicePdf, shareInvoiceViaWhatsApp, downloadBlob } from './pdfInvoiceGenerator.js';
+import WhatsAppShareModal from './WhatsAppShareModal';
 
 // Helper to convert Indian Rupees numbers into Words
 function numberToWordsINR(amount) {
@@ -48,10 +49,12 @@ export default function SalesInvoice({
   catalog = {},
   settings = {},
   previousBalance = 0,
+  isNewlyCreated = false,
   onPrint,
   onDownloadPdf
 }) {
   const currencyCode = record.currency || settings.currency || 'INR';
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
 
   // Customer details resolution
   const customer = useMemo(() => {
@@ -225,6 +228,65 @@ export default function SalesInvoice({
 
   return (
     <>
+      {/* ── SUCCESS NOTIFICATION BANNER (When sale is newly created) ───────── */}
+      {isNewlyCreated && (
+        <div
+          className="sale-success-card no-print"
+          style={{
+            background: 'linear-gradient(135deg, #eafaf1 0%, #edf8f2 100%)',
+            border: '1.5px solid #a3cca8',
+            borderRadius: '12px',
+            padding: '14px 18px',
+            marginBottom: '16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '12px',
+            boxShadow: '0 2px 8px rgba(26,102,64,0.06)'
+          }}
+        >
+          <div>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: '#104B35', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CheckCircle2 size={18} color="#176B48" /> Sale Bill #{record.receipt_number || record.id?.slice(0, 8)} Created Successfully!
+            </div>
+            <div style={{ fontSize: '13px', color: '#446650', marginTop: '2px' }}>
+              Inventory deducted and receipt recorded. Share the bill directly to the customer on WhatsApp.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setShowWhatsAppModal(true)}
+              style={{
+                background: '#25D366',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '9px 18px',
+                fontSize: '13.5px',
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '7px',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(37, 211, 102, 0.35)'
+              }}
+            >
+              <MessageCircle size={16} /> Share Bill on WhatsApp
+            </button>
+            <Button
+              variant="secondary"
+              onClick={handleDownloadPdfAction}
+              disabled={isDownloading}
+              style={{ fontSize: '13.5px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Download size={15} /> Download PDF
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="a4-invoice-wrapper">
         {/* ── TOP ACTION BAR (Hidden during print) ─────────────────────────── */}
         <div className="a4-invoice-actions no-print">
@@ -235,16 +297,28 @@ export default function SalesInvoice({
             </span>
           </div>
           <div className="a4-invoice-actions-right">
-            <Button
-              variant="secondary"
-              disabled={isSharing}
-              onClick={handleShareWhatsApp}
+            <button
+              type="button"
+              onClick={() => setShowWhatsAppModal(true)}
               title="Share PDF Invoice on WhatsApp"
-              style={{ color: '#128c7e', borderColor: '#25d36650', background: '#eafaf1' }}
+              style={{
+                background: '#25D366',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '8px 16px',
+                fontSize: '13px',
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(37, 211, 102, 0.25)'
+              }}
             >
-              <MessageCircle size={16} color="#25d366" />
-              {isSharing ? 'Generating PDF…' : 'WhatsApp Bill'}
-            </Button>
+              <MessageCircle size={16} />
+              Share on WhatsApp
+            </button>
             <Button
               variant="secondary"
               disabled={isDownloading}
@@ -312,6 +386,14 @@ export default function SalesInvoice({
             </div>
           </div>
         </Dialog>
+      )}
+
+      {/* ── WHATSAPP SHARE MODAL ────────────────────────────────────── */}
+      {showWhatsAppModal && (
+        <WhatsAppShareModal
+          invoiceData={invoiceSheetProps}
+          onClose={() => setShowWhatsAppModal(false)}
+        />
       )}
 
       {/* ── ISOLATED PRINT PORTAL (Attached directly to document.body) ───── */}

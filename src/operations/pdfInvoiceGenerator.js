@@ -29,11 +29,70 @@ export function hexToRgb(hex) {
 
 export function cleanPhoneNumber(phone) {
   if (!phone) return '';
-  const digits = String(phone).replace(/\D/g, '');
+  let digits = String(phone).replace(/\D/g, '');
+  // Prevent duplicate country code prefix like 9191...
+  if (digits.startsWith('9191') && digits.length >= 14) {
+    digits = digits.slice(2);
+  }
   if (digits.length === 10) return `91${digits}`;
   if (digits.length === 12 && digits.startsWith('91')) return digits;
   if (digits.length === 11 && digits.startsWith('0')) return `91${digits.slice(1)}`;
   return digits;
+}
+
+export function validatePhoneNumber(phone) {
+  if (!phone || !String(phone).trim()) {
+    return { valid: false, error: 'Please enter a mobile number.' };
+  }
+  const rawDigits = String(phone).replace(/\D/g, '');
+  const cleaned = cleanPhoneNumber(phone);
+  const core10 = cleaned.startsWith('91') && cleaned.length === 12 ? cleaned.slice(2) : rawDigits;
+
+  if (core10.length !== 10) {
+    return { valid: false, error: 'Mobile number must contain 10 digits.' };
+  }
+  if (!/^[6-9]/.test(core10)) {
+    return { valid: false, error: 'Indian mobile number should start with 6, 7, 8, or 9.' };
+  }
+  return {
+    valid: true,
+    cleanNumber: cleaned,
+    core10,
+    formatted: `+91 ${core10.slice(0, 5)} ${core10.slice(5)}`
+  };
+}
+
+export function generateWhatsAppBillMessage({
+  customerName,
+  receiptNumber,
+  total,
+  amountReceived,
+  balance
+}) {
+  const name = customerName ? customerName.trim() : 'Customer';
+  const invNum = receiptNumber ? `S-${receiptNumber}` : 'Sale';
+  const tot = Number(total || 0).toLocaleString('en-IN');
+  const rec = Number(amountReceived || 0).toLocaleString('en-IN');
+  const bal = Number(balance || 0).toLocaleString('en-IN');
+
+  return [
+    `Hello ${name},`,
+    ``,
+    `Thank you for choosing JM BRICKS!`,
+    ``,
+    `Your sales invoice is ready.`,
+    ``,
+    `Invoice No: ${invNum}`,
+    `Total Amount: ₹${tot}`,
+    `Amount Received: ₹${rec}`,
+    `Balance: ₹${bal}`,
+    ``,
+    `Please find your bill attached.`,
+    ``,
+    `Thank you for your business!`,
+    ``,
+    `JM BRICKS`
+  ].join('\n');
 }
 
 export function numberToWordsINR(amount) {
@@ -97,6 +156,8 @@ export async function getLogoJpegData() {
     canvas.width = 160;
     canvas.height = 160;
     const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#f4f9f5';
+    ctx.fillRect(0, 0, 160, 160);
     ctx.drawImage(img, 0, 0, 160, 160);
 
     const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
@@ -597,20 +658,27 @@ export async function downloadInvoicePdf(data) {
 
 /**
  * WhatsApp Sharing handler
- * Mobile: uses Web Share API with actual PDF file attachment
+ * Mobile: uses Web Share API with actual PDF file attachment where supported
  * Desktop: downloads PDF file, opens WhatsApp Web with customer phone, and invokes onDesktopPrompt
  */
-export async function shareInvoiceViaWhatsApp(data, onDesktopPrompt = null) {
+export async function shareInvoiceViaWhatsApp(data, onDesktopPrompt = null, customRecipientPhone = null) {
   const receiptNum = data.record?.receipt_number || data.record?.id?.slice(0, 8) || 'bill';
   const fileName = `Invoice_S-${receiptNum}.pdf`;
   const custName = data.customerName || data.record?.customer_name || 'Customer';
-  const rawPhone = data.customerPhone || data.record?.customer_phone || '';
+  const rawPhone = customRecipientPhone != null ? customRecipientPhone : (data.customerPhone || data.record?.customer_phone || '');
   const phone = cleanPhoneNumber(rawPhone);
 
   const grandTotal = Number(data.grandTotal ?? data.record?.total ?? 0);
-  const outstanding = Number(data.outstanding ?? data.record?.outstanding_balance ?? 0);
+  const amountReceived = Number(data.amountPaid ?? data.record?.amount_received ?? 0);
+  const balance = Number(data.outstanding ?? data.record?.outstanding_balance ?? Math.max(0, grandTotal - amountReceived));
 
-  const caption = `Hello ${custName},\nPlease find attached your invoice S-${receiptNum} from JM BRICKS.\nTotal: Rs. ${grandTotal.toLocaleString('en-IN')}${outstanding > 0 ? `\nBalance Due: Rs. ${outstanding.toLocaleString('en-IN')}` : ''}\nThank you!`;
+  const caption = generateWhatsAppBillMessage({
+    customerName: custName,
+    receiptNumber: receiptNum,
+    total: grandTotal,
+    amountReceived: amountReceived,
+    balance: balance
+  });
 
   // 1. Generate actual PDF blob
   const pdfBlob = await generateInvoicePdfBlob(data);
@@ -628,9 +696,9 @@ export async function shareInvoiceViaWhatsApp(data, onDesktopPrompt = null) {
         title: `Invoice S-${receiptNum}`,
         text: caption,
       });
-      return { success: true, method: 'web-share' };
+      return { success: true, method: 'web-share', fileName, pdfBlob, caption, phone };
     } catch (shareErr) {
-      // User cancelled share dialog (AbortError) - return silently
+      // User cancelled share dialog (AbortError) - return aborted status
       if (shareErr.name === 'AbortError') {
         return { success: false, aborted: true };
       }
@@ -642,10 +710,14 @@ export async function shareInvoiceViaWhatsApp(data, onDesktopPrompt = null) {
   // Download the actual PDF file
   downloadBlob(pdfBlob, fileName);
 
-  // Construct WhatsApp Web URL
+  const isMobileBrowser = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const waUrl = phone
-    ? `https://web.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(caption)}`
-    : `https://web.whatsapp.com/send?text=${encodeURIComponent(caption)}`;
+    ? (isMobileBrowser
+        ? `https://wa.me/${phone}?text=${encodeURIComponent(caption)}`
+        : `https://web.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(caption)}`)
+    : (isMobileBrowser
+        ? `https://wa.me/?text=${encodeURIComponent(caption)}`
+        : `https://web.whatsapp.com/send?text=${encodeURIComponent(caption)}`);
 
   window.open(waUrl, '_blank', 'noopener,noreferrer');
 
@@ -656,10 +728,12 @@ export async function shareInvoiceViaWhatsApp(data, onDesktopPrompt = null) {
       customerName: custName,
       customerPhone: rawPhone,
       cleanPhone: phone,
+      caption,
       waUrl,
-      pdfBlob
+      pdfBlob,
+      isMobile: isMobileBrowser
     });
   }
 
-  return { success: true, method: 'desktop-download' };
+  return { success: true, method: 'desktop-download', fileName, pdfBlob, caption, phone, waUrl };
 }

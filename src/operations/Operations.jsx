@@ -55,7 +55,7 @@ export default function Operations({profile,settings}) {
   function clearPending(){sessionStorage.removeItem(storageKey);setPending(null);}
   function completed(request,result){
     clearPending();setModal(null);setMessage(request.kind.startsWith('delete_')?'Entry deleted. Stock, balances and reports have been updated.':`${titles[request.kind]} saved successfully.`);if(request.kind.startsWith('delete_'))setSelected(null);setRevision(v=>v+1);
-    if(request.kind==='sale'||request.kind==='purchase')setSelected({kind:request.kind==='sale'?'sales':'purchases',id:result.id});
+    if(request.kind==='sale'||request.kind==='purchase')setSelected({kind:request.kind==='sale'?'sales':'purchases',id:result.id,isNewlyCreated:request.kind==='sale'});
     else if(request.kind.endsWith('_payment'))setSelected({kind:request.kind==='customer_payment'?'sales':'purchases',id:result.transaction_id});
   }
   async function send(request){
@@ -628,7 +628,7 @@ function HistoryPage({kind,revision,catalog,settings,canWrite,owner,open,onDetai
  );
 }
 function Pagination({page,count,setPage}){return <div className="pagination"><Button variant="secondary" disabled={!page} onClick={()=>setPage(p=>p-1)}>Previous</Button><span>Page {page+1} of {Math.max(1,Math.ceil(count/25))}</span><Button variant="secondary" disabled={(page+1)*25>=count} onClick={()=>setPage(p=>p+1)}>Next</Button></div>}
-function TransactionDetail({kind,id,catalog,settings,canWrite,owner,onClose,onPayment,onEditSale}){
+function TransactionDetail({kind,id,isNewlyCreated=false,catalog,settings,canWrite,owner,onClose,onPayment,onEditSale}){
  const [data,setData]=useState(null),[error,setError]=useState('');
  const [previousBalance,setPreviousBalance]=useState(0);
  const [pdfBusy,setPdfBusy]=useState(false);
@@ -680,6 +680,7 @@ function TransactionDetail({kind,id,catalog,settings,canWrite,owner,onClose,onPa
             catalog={catalog}
             settings={settings}
             previousBalance={previousBalance}
+            isNewlyCreated={isNewlyCreated}
           />
           <div className="dialog-actions no-print" style={{ marginTop: '16px' }}>
             {owner && !data.record.deleted_at && (

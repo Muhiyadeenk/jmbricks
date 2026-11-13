@@ -4,6 +4,8 @@ import {
   escapePdf,
   hexToRgb,
   cleanPhoneNumber,
+  validatePhoneNumber,
+  generateWhatsAppBillMessage,
   numberToWordsINR,
   formatDateDisplay,
   buildInvoicePdfBytes
@@ -14,7 +16,49 @@ test('cleanPhoneNumber handles 10-digit Indian numbers and prefixes', () => {
   assert.equal(cleanPhoneNumber('+91 98479 47772'), '919847947772');
   assert.equal(cleanPhoneNumber('09847947772'), '919847947772');
   assert.equal(cleanPhoneNumber('919847947772'), '919847947772');
+  assert.equal(cleanPhoneNumber('91919847947772'), '919847947772'); // Prevents accidental double 91
   assert.equal(cleanPhoneNumber(''), '');
+});
+
+test('validatePhoneNumber validates 10-digit Indian numbers properly', () => {
+  const v1 = validatePhoneNumber('9847947772');
+  assert.equal(v1.valid, true);
+  assert.equal(v1.cleanNumber, '919847947772');
+  assert.equal(v1.core10, '9847947772');
+  assert.equal(v1.formatted, '+91 98479 47772');
+
+  const v2 = validatePhoneNumber('+91 97474 95127');
+  assert.equal(v2.valid, true);
+  assert.equal(v2.cleanNumber, '919747495127');
+
+  const v3 = validatePhoneNumber('12345');
+  assert.equal(v3.valid, false);
+  assert.match(v3.error, /10 digits/i);
+
+  const v4 = validatePhoneNumber('');
+  assert.equal(v4.valid, false);
+  assert.match(v4.error, /Please enter a mobile number/i);
+});
+
+test('generateWhatsAppBillMessage matches exact requested billing message template', () => {
+  const msg = generateWhatsAppBillMessage({
+    customerName: 'Muhiyadeen K',
+    receiptNumber: '25',
+    total: 18496,
+    amountReceived: 5000,
+    balance: 13496
+  });
+
+  assert.ok(msg.includes('Hello Muhiyadeen K,'));
+  assert.ok(msg.includes('Thank you for choosing JM BRICKS!'));
+  assert.ok(msg.includes('Your sales invoice is ready.'));
+  assert.ok(msg.includes('Invoice No: S-25'));
+  assert.ok(msg.includes('Total Amount: ₹18,496'));
+  assert.ok(msg.includes('Amount Received: ₹5,000'));
+  assert.ok(msg.includes('Balance: ₹13,496'));
+  assert.ok(msg.includes('Please find your bill attached.'));
+  assert.ok(msg.includes('Thank you for your business!'));
+  assert.ok(msg.includes('JM BRICKS'));
 });
 
 test('numberToWordsINR handles typical brick sale amounts', () => {
