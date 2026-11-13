@@ -8,7 +8,7 @@ import {products,sales,purchases,expenses,production,weekly,monthly,previewDate}
 import './styles.css';
 import Reports from './operations/Reports';
 import {sampleReportSnapshot} from './sampleReports';
-const navigation=[['Dashboard','/',LayoutDashboard],['Sales','/sales',ShoppingBag],['Purchases','/purchases',ShoppingCart],['Stock Management','/stock',Package],['Production','/production',Factory],['Expenses','/expenses',Wallet],['Reports','/reports',ChartNoAxesCombined],['Settings','/settings',Settings]];
+const navigation=[['Dashboard','/',LayoutDashboard],['Sales','/sales',ShoppingBag],['Purchases','/purchases',ShoppingCart],['Stock','/stock',Package],['Production','/production',Factory],['Spending','/expenses',Wallet],['Reports','/reports',ChartNoAxesCombined],['Settings','/settings',Settings]];
 const bottomNavPages=[['Dashboard','/',LayoutDashboard],['Sales','/sales',ShoppingBag],['Production','/production',Factory],['Stock','/stock',Package]];
 const status=p=>p.stock===0?'Out of Stock':p.stock<=p.min?'Low Stock':'In Stock';
 export default function PreviewApp(){
@@ -38,7 +38,7 @@ export default function PreviewApp(){
         <div className="sidebar-brand-row">
           <Link className="brand" to="/" onClick={()=>setMobile(false)}>
             <span className="jm-logo"><img src="/jm-bricks-logo.png" alt="JM Bricks logo"/></span>
-            <span className="brand-text">JM BRICKS<small>BUSINESS MANAGER</small></span>
+            <span className="brand-text">JM BRICKS<small>BUSINESS MANAGEMENT</small></span>
           </Link>
           <button className="icon-button mobile-close-btn" onClick={()=>setMobile(false)} aria-label="Close navigation">
             <X size={20}/>
@@ -52,7 +52,7 @@ export default function PreviewApp(){
               <NavLink to={path} end onClick={()=>setMobile(false)} title={label}>
                 <Icon size={20}/>
                 <span>{label}</span>
-                {label==='Stock Management'&&!empty&&<b>2</b>}
+                {label==='Stock'&&!empty&&<b>2</b>}
               </NavLink>
             </React.Fragment>
           ))}
@@ -94,8 +94,8 @@ export default function PreviewApp(){
                   <div className="dashboard-greeting-eyebrow">
                     <span>{getGreeting()}</span>
                   </div>
-                  <h1 className="dashboard-greeting-title">Welcome to JM BRICKS Business Manager</h1>
-                  <p className="dashboard-greeting-sub">A clear, real-time view of your sales, brick stock, and daily manufacturing operations.</p>
+                  <h1 className="dashboard-greeting-title">Welcome to JM BRICKS Business Management</h1>
+                  <p className="dashboard-greeting-sub">Track daily production, sales, stock, and business spending.</p>
                 </div>
                 <div className="dashboard-banner-right">
                   <div className="dashboard-date-badge">

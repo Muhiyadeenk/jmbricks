@@ -43,10 +43,10 @@ const columns = [
   ['count_3', 'Count 3'],
   ['production_lines', 'Lines'],
   ['default_quantity', 'Bricks/line'],
-  ['actual_quantity', 'Actual produced'],
-  ['rejected_quantity', 'Rejected'],
-  ['net_quantity', 'Net production'],
-  ['cement_packs_used', 'Cement sacks'],
+  ['actual_quantity', 'Total Bricks Made'],
+  ['rejected_quantity', 'Damaged Bricks'],
+  ['net_quantity', 'Good Bricks Produced'],
+  ['cement_packs_used', 'Cement Bags Used'],
   ['status', 'Status'],
 ];
 
@@ -120,9 +120,9 @@ export default function Production({ catalog, settings, profile, revision, onCha
 
   const totals = [
     ['Actual produced',     todays.reduce((s, r) => s + Number(r.actual_quantity), 0) + oldToday.reduce((s, r) => s + Number(r.quantity_produced), 0)],
-    ['Production entries',  new Set(todays.map(r => r.production_session_id)).size + oldToday.length],
-    ['Net production',      [...todays, ...oldToday].reduce((s, r) => s + Number(r.net_quantity), 0)],
-    ['Cement sacks',        todays.reduce((s, r) => s + Number(r.cement_packs_used), 0)],
+    ['Production Entries',  new Set(todays.map(r => r.production_session_id)).size + oldToday.length],
+    ['Good Bricks Produced',      [...todays, ...oldToday].reduce((s, r) => s + Number(r.net_quantity), 0)],
+    ['Cement Bags Used',        todays.reduce((s, r) => s + Number(r.cement_packs_used), 0)],
   ];
 
   async function send(request) {
@@ -207,7 +207,7 @@ export default function Production({ catalog, settings, profile, revision, onCha
       {error   && <p className="auth-error" role="alert">{error}</p>}
 
       {/* Today's summary */}
-      <SectionTitle title="Today's production" subtitle={`${displayDate(end)} · completed entries only`} />
+      <SectionTitle title="Today's Production" subtitle={`${displayDate(end)} · completed entries only`} />
       <div className="report-total-grid">
         {totals.map(([label, value]) => (
           <Card key={label} className="report-total">
@@ -250,7 +250,7 @@ export default function Production({ catalog, settings, profile, revision, onCha
 
       {/* Register table */}
       <Card>
-        <SectionTitle title="Production register" subtitle="Rows with the same reference belong to one session." />
+        <SectionTitle title="Previous Production" subtitle="Rows with the same reference belong to one production entry." />
         {loading ? <p role="status">Loading production…</p> : (
           <>
             <div className="no-print">
@@ -292,9 +292,9 @@ export default function Production({ catalog, settings, profile, revision, onCha
             columns={[
               { key: 'production_date', label: 'Date',     render: r => displayDate(r.production_date) },
               { key: 'product_name',    label: 'Product' },
-              { key: 'quantity_produced', label: 'Produced' },
-              { key: 'rejected_quantity', label: 'Rejected' },
-              { key: 'net_quantity',    label: 'Net' },
+              { key: 'quantity_produced', label: 'Total Bricks Made' },
+              { key: 'rejected_quantity', label: 'Damaged Bricks' },
+              { key: 'net_quantity',    label: 'Good Bricks Produced' },
             ]}
           />
         </details>
@@ -413,7 +413,7 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
       const actualQty = Number(r.actual_quantity || 0);
       const rejectedQty = Number(r.rejected_quantity || 0);
       if (rejectedQty > actualQty) {
-        setLocalError('Rejected bricks cannot exceed actual production.');
+        setLocalError('Damaged bricks cannot exceed total bricks made.');
         return;
       }
       if (status === 'completed' && actualQty <= 0) {
@@ -632,9 +632,9 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
                   {[
                     ['production_lines', 'Number of Production Lines',   1, false, 'e.g. 100', true],
                     ['default_quantity', 'Bricks Per Line (auto)',        1, true,  'Select size', false],
-                    ['actual_quantity',  'Total Bricks Produced (auto)',   0, true,  'Auto calculated', false],
-                    ['rejected_quantity','Damaged / Rejected Bricks',     0, false, '0', false],
-                    ['cement_packs_used','Cement Sacks Used',             0, false, 'Auto calculated', false],
+                    ['actual_quantity',  'Total Bricks Made (auto)',   0, true,  'Auto calculated', false],
+                    ['rejected_quantity','Damaged Bricks',     0, false, '0', false],
+                    ['cement_packs_used','Cement Bags Used',             0, false, 'Auto calculated', false],
                   ].map(([k, l, min, isReadOnly, placeholder, isRequired]) => (
                     <Field
                       key={k}
@@ -678,10 +678,10 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
 
                 {/* Row summary */}
                 <p className="help">
-                  {r.size ? `${r.size}-inch · ` : ''}{number(r.production_lines || 0)} lines × {number(r.default_quantity || 0)} = {number(r.actual_quantity || 0)} bricks · {number(r.cement_packs_used || 0)} cement sacks
+                  {r.size ? `${r.size}-inch · ` : ''}{number(r.production_lines || 0)} lines × {number(r.default_quantity || 0)} = {number(r.actual_quantity || 0)} bricks · {number(r.cement_packs_used || 0)} cement bags
                 </p>
                 <div className="line-footer">
-                  <strong>Net production: {number(Math.max(0, Number(r.actual_quantity || 0) - Number(r.rejected_quantity || 0)))}</strong>
+                  <strong>Good bricks produced: {number(Math.max(0, Number(r.actual_quantity || 0) - Number(r.rejected_quantity || 0)))}</strong>
                   {data.items.length > 1 && (
                     <Button type="button" variant="secondary" onClick={() => set('items', data.items.filter((_, n) => n !== i))}>
                       Remove row
@@ -703,7 +703,7 @@ export function ProductionForm({ initial, catalog, settings, owner, canWrite, er
         </fieldset>
 
         <div className="notice" style={{ background: cementCheck.sufficient ? '#f0f9f3' : '#fef2f2', borderColor: cementCheck.sufficient ? '#b8dabf' : '#fca5a5', color: cementCheck.sufficient ? '#164a2c' : '#991b1b' }}>
-          <strong>Net production: {number(net)} bricks</strong> · Cement consumption: <strong>{totalCementNeeded} bags</strong> ({cementCheck.sufficient ? `Available: ${availableCement} bags` : 'INSUFFICIENT STOCK'}). Completing production automatically deducts cement from inventory.
+          <strong>Good bricks produced: {number(net)} bricks</strong> · Cement used: <strong>{totalCementNeeded} bags</strong> ({cementCheck.sufficient ? `Available: ${availableCement} bags` : 'INSUFFICIENT STOCK'}). Completing production automatically deducts cement from inventory.
         </div>
 
         {(localError || error) && <p className="auth-error" role="alert">{localError || error}</p>}
@@ -799,10 +799,10 @@ export function ProductionOverview({ settings, revision }) {
         <>
           <div className="stats-grid report-stats production-stats-grid" style={{ margin: '14px 0 20px' }}>
             {[
-              ['Actual Produced',   'quantity_produced', 'Total bricks pressed today', Factory, 'neutral'],
-              ['Net Production',    'net_quantity',      'Good bricks added to stock', Package, 'green'],
-              ['Rejected Bricks',   'rejected_quantity', 'Damaged or broken bricks',   Trash2,  'red'],
-              ['Cement Sacks Used', 'cement_packs_used', 'Consumed standard 50kg bags', Layers, 'amber'],
+              ['Total Bricks Made', 'quantity_produced', 'Total bricks pressed today', Factory, 'neutral'],
+              ['Good Bricks Produced', 'net_quantity',      'Good bricks added to stock', Package, 'green'],
+              ['Damaged Bricks', 'rejected_quantity', 'Damaged or broken bricks',   Trash2,  'red'],
+              ['Cement Bags Used', 'cement_packs_used', 'Consumed standard 50kg bags', Layers, 'amber'],
             ].map(([l, k, foot, Icon, tone]) => (
               <StatCard
                 key={k}

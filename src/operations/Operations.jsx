@@ -167,8 +167,8 @@ export default function Operations({profile,settings}) {
               <div className="dashboard-greeting-eyebrow">
                 <span>{getGreeting()}</span>
               </div>
-              <h1 className="dashboard-greeting-title">Welcome to JM BRICKS Business Manager</h1>
-              <p className="dashboard-greeting-sub">Monitor daily production, track live sales, manage brick inventory and operations.</p>
+              <h1 className="dashboard-greeting-title">Welcome to JM BRICKS Business Management</h1>
+              <p className="dashboard-greeting-sub">Track daily production, sales, stock, and business spending.</p>
             </div>
             <div className="dashboard-banner-right">
               <div className="dashboard-date-badge">
@@ -177,7 +177,7 @@ export default function Operations({profile,settings}) {
               </div>
               <Button variant="secondary" className="dashboard-refresh-btn" onClick={() => setRevision(v => v + 1)}>
                 <RefreshCw size={15} />
-                <span>Refresh Data</span>
+                <span>Refresh</span>
               </Button>
             </div>
           </div>
@@ -187,11 +187,11 @@ export default function Operations({profile,settings}) {
             <div className="quick-actions-btns">
               <Button variant="primary" disabled={!canWrite} onClick={() => open('sale')}>
                 <ShoppingBag size={16} />
-                <span>New Sale</span>
+                <span>Add New Sale</span>
               </Button>
               <Button variant="secondary" disabled={!canWrite} onClick={() => open('purchase')}>
                 <ShoppingCart size={16} />
-                <span>Purchase Raw Material</span>
+                <span>Add New Purchase</span>
               </Button>
               <Button variant="secondary" disabled={!canWrite} onClick={() => open('production')}>
                 <Factory size={16} />
@@ -199,7 +199,7 @@ export default function Operations({profile,settings}) {
               </Button>
               <Button variant="secondary" disabled={!canWrite} onClick={() => open('expense')}>
                 <Wallet size={16} />
-                <span>Add Expense</span>
+                <span>Add Spending</span>
               </Button>
             </div>
           </div>
@@ -218,9 +218,9 @@ export default function Operations({profile,settings}) {
         <>
           <div className="operations-heading">
             <div>
-              <span className="eyebrow">{page === 'stock' ? 'INVENTORY' : page.toUpperCase()}</span>
-              <h1>{page === 'stock' ? 'Stock Management' : formats[page]?.title || (page === 'production' ? 'Production Register' : 'Reports')}</h1>
-              <p>{page === 'production' ? 'Record daily brick production and automatically sync cement stock.' : `Live business records · ${displayDate(today(settings.timezone))}`}</p>
+              <span className="eyebrow">{page === 'stock' ? 'STOCK' : page === 'expenses' ? 'SPENDING' : page.toUpperCase()}</span>
+              <h1>{page === 'stock' ? 'Stock' : formats[page]?.title || (page === 'production' ? 'Production Records' : 'Reports')}</h1>
+              <p>{page === 'production' ? 'Record daily brick production and automatically sync cement stock.' : `Business records · ${displayDate(today(settings.timezone))}`}</p>
             </div>
             <Button variant="secondary" onClick={() => setRevision(v => v + 1)}>
               <RefreshCw size={15} />
@@ -319,32 +319,32 @@ function StockPage({catalog,settings,owner,open,onHistory}){
        <div className="product-numbers">
          <div>
            <strong>{p.is_stocked?number(p.available_quantity):'—'}</strong>
-           <small>{p.is_stocked ? (isCement ? 'Bags in stock' : `${p.unit} in stock`) : 'Not stocked'}</small>
+           <small>{p.is_stocked ? (isCement ? 'Bags in stock' : 'Bricks in Stock') : 'Not stocked'}</small>
          </div>
          {p.kind==='finished_brick'?(
            <b>{currency(p.selling_price,settings.currency)}<small>selling price / {p.unit}</small></b>
          ):(
-           <b>Raw Material<small>For brick production</small></b>
+           <b>Material<small>For brick production</small></b>
          )}
        </div>
        <div className="product-footer">Minimum stock<strong>{number(p.minimum_stock)} {isCement ? 'Bags' : p.unit}</strong></div>
        <div className="product-footer">Stock value<strong>{p.inventory_value==null?'Unknown':currency(p.inventory_value,settings.currency)}</strong></div>
        {p.kind==='finished_brick'?(
          <>
-           {[['total_produced','Total production'],['total_sold','Total sold'],['total_rejected','Rejected bricks'],['other_stock_change','Other receipts / adjustments']].map(([key,label])=><div className="product-footer" key={key}>{label}<strong>{number(p[key]||0)}</strong></div>)}
+           {[['total_produced','Total Bricks Made'],['total_sold','Bricks Sold'],['total_rejected','Damaged Bricks'],['other_stock_change','Stock Changes']].map(([key,label])=><div className="product-footer" key={key}>{label}<strong>{number(p[key]||0)}</strong></div>)}
            <div className="product-footer">Last production<strong>{displayDate(p.last_production_date)}</strong></div>
          </>
        ):(
          isCement ? (
            <>
              <div className="product-footer">Total Purchased<strong>{number(p.total_purchased ?? 0)} Bags</strong></div>
-             <div className="product-footer">Consumed in Production<strong style={{ color: '#b54708' }}>−{number(p.total_consumed || 0)} Bags</strong></div>
+             <div className="product-footer">Materials Used in Production<strong style={{ color: '#b54708' }}>−{number(p.total_consumed || 0)} Bags</strong></div>
            </>
          ) : (
            <>
              <div className="product-footer">Total Purchased<strong>{number(p.total_purchased ?? 0)} {p.unit}</strong></div>
              {Number(p.total_consumed || 0) > 0 && (
-               <div className="product-footer">Consumed in Production<strong style={{ color: '#b54708' }}>−{number(p.total_consumed || 0)} {p.unit}</strong></div>
+               <div className="product-footer">Materials Used in Production<strong style={{ color: '#b54708' }}>−{number(p.total_consumed || 0)} {p.unit}</strong></div>
              )}
            </>
          )
@@ -360,9 +360,9 @@ function StockPage({catalog,settings,owner,open,onHistory}){
    <div className="stock-refresh">
      <div className="stock-intro">
        <div>
-         <span className="eyebrow">JM BRICKS · INVENTORY</span>
+         <span className="eyebrow">JM BRICKS · STOCK</span>
          <h2>Your yard & raw materials at a glance.</h2>
-         <p>Finished bricks and manufacturing materials ready for daily production.</p>
+         <p>Ready bricks and manufacturing materials in stock.</p>
        </div>
        <Link className="btn secondary" to="/production">Go to Production →</Link>
      </div>
@@ -372,7 +372,7 @@ function StockPage({catalog,settings,owner,open,onHistory}){
          <input aria-label="Search products" placeholder="Search product name, code or raw material…" value={search} onChange={e=>setSearch(e.target.value)}/>
        </div>
        <select aria-label="Filter products" value={filter} onChange={e=>setFilter(e.target.value)}>
-         {[['all','All inventory'],... [4,5,6,8].map(s=>[String(s),`${s}-inch bricks`]),['finished_brick','Finished bricks only'],['raw_material','Cement stock only'],['Low Stock','Low Stock'],['Out of Stock','Out of Stock'],['inactive','Inactive']].map(([v,l])=><option key={v} value={v}>{l}</option>)}
+         {[['all','All Stock'],... [4,5,6,8].map(s=>[String(s),`${s}-inch bricks`]),['finished_brick','Ready Bricks only'],['raw_material','Material Stock only'],['Low Stock','Items Running Low'],['Out of Stock','Out of Stock'],['inactive','Inactive']].map(([v,l])=><option key={v} value={v}>{l}</option>)}
        </select>
      </div>
      <div className="stock-layout">
@@ -380,7 +380,7 @@ function StockPage({catalog,settings,owner,open,onHistory}){
          {/* 1. Finished Brick Stock Section */}
          {showBricks && (
            <div className="stock-section">
-             <SectionTitle title="Finished Brick Stock" subtitle="Finished bricks ready for sale" />
+             <SectionTitle title="Ready Bricks" subtitle="Ready bricks available for sale" />
              <div className="product-grid" style={{ marginTop: '12px' }}>
                {[4,5,6,8].filter(size=>!catalog.products.some(p=>Number(p.brick_size)===size)&&(filter==='all'||filter==='finished_brick'||filter===String(size))&&!search).map(size=><Card key={`missing-${size}`} className="product-card unconfigured"><div className="product-top"><span>BRICK COLLECTION</span><Badge tone="neutral">Setup needed</Badge></div><div className="brick-stage"><span className="stock-size">{size}<small>INCH</small></span><Brick/></div><h3>{size}-inch Brick</h3><div className="stock-pending"><strong>—</strong><span>Stock available after setup</span></div><Link className="stock-setup" to="/production">Configure this brick <span>↗</span></Link></Card>)}
                {brickList.map(renderCard)}
@@ -394,7 +394,7 @@ function StockPage({catalog,settings,owner,open,onHistory}){
          {/* 2. Raw Material Stock Section (ONLY CEMENT) */}
          {showRaw && (
            <div className="stock-section">
-             <SectionTitle title="Raw Material Stock (Cement)" subtitle="Cement stock ready for daily brick production" />
+             <SectionTitle title="Material Stock" subtitle="Cement stock ready for daily brick production" />
              <div className="product-grid" style={{ marginTop: '12px' }}>
                {rawList.map(renderCard)}
                {rawList.length === 0 && (
@@ -510,18 +510,18 @@ function HistoryPage({kind,revision,catalog,settings,canWrite,owner,open,onDetai
  }
 
  const f=formats[kind];
- const cols=[{key:f.date,label:'Date'},{key:f.search,label:kind==='sales'?'Customer':kind==='purchases'?'Supplier':kind==='production'?'Product':'Description'}];
+ const cols=[{key:f.date,label:'Date'},{key:f.search,label:kind==='sales'?'Customer Information':kind==='purchases'?'Supplier Name':kind==='production'?'Product':'Description'}];
  if(kind==='purchases'){
    cols.push(
-     {key:'raw_material',label:'Raw Material',render:r=>getPurchaseSummary(r).material},
+     {key:'raw_material',label:'Material Name',render:r=>getPurchaseSummary(r).material},
      {key:'quantity',label:'Quantity',render:r=>getPurchaseSummary(r).quantity}
    );
  }
  if(kind==='production')cols.push({key:'quantity_produced',label:'Produced'},{key:'rejected_quantity',label:'Rejected'},{key:'net_quantity',label:'Net quantity'});
- else cols.push({key:kind==='expenses'?'amount':'total',label:'Total',render:r=>currency(kind==='expenses'?r.amount:r.total,r.currency)});
- if(kind==='purchases')cols.push({key:'payment_status',label:'Payment',render:r=>getPaymentBadge(r)});
- if(['sales','purchases'].includes(kind))cols.push({key:'outstanding_balance',label:'Outstanding',render:r=><Badge tone={Number(r.outstanding_balance)>0?'amber':'green'}>{currency(r.outstanding_balance,r.currency)}</Badge>});
- if(kind==='expenses')cols.push({key:'category_name',label:'Category'});
+ else cols.push({key:kind==='expenses'?'amount':'total',label:kind==='sales'?'Total Sales':kind==='purchases'?'Total Purchase Amount':'Total Money Spent',render:r=>currency(kind==='expenses'?r.amount:r.total,r.currency)});
+ if(kind==='purchases')cols.push({key:'payment_status',label:'Payment Details',render:r=>getPaymentBadge(r)});
+ if(['sales','purchases'].includes(kind))cols.push({key:'outstanding_balance',label:kind==='sales'?'Remaining Amount':'Remaining Payment',render:r=><Badge tone={Number(r.outstanding_balance)>0?'amber':'green'}>{currency(r.outstanding_balance,r.currency)}</Badge>});
+ if(kind==='expenses')cols.push({key:'category_name',label:'Spending Type'});
  cols.push({key:'status',label:'Status',render:r=><Badge tone={r.deleted_at?'neutral':'green'}>{r.deleted_at?'Deleted':'Active'}</Badge>});
  if(kind==='sales'){
   cols.push({
@@ -561,21 +561,21 @@ function HistoryPage({kind,revision,catalog,settings,canWrite,owner,open,onDetai
            <Search size={18}/>
            <input aria-label="Search records" placeholder={`Search ${kind==='sales'?'customers':kind==='purchases'?'suppliers':kind==='production'?'products':'descriptions'}…`} value={filters.search} onChange={e=>change('search',e.target.value)}/>
          </div>
-         {kind==='expenses'&&<select aria-label="Expense category" value={filters.category} onChange={e=>change('category',e.target.value)}><option value="">All categories</option>{catalog.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
+         {kind==='expenses'&&<select aria-label="Spending type" value={filters.category} onChange={e=>change('category',e.target.value)}><option value="">All Spending Types</option>{catalog.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
          <select aria-label="Record status" value={filters.status} onChange={e=>change('status',e.target.value)}><option value="active">Active entries</option><option value="deleted">Deleted entries</option><option value="all">All entries</option></select>
          {canWrite&&<Button onClick={()=>open(f.operation)}><Plus size={16}/>{titles[f.operation]}</Button>}
-         {kind==='expenses'&&owner&&<Button variant="secondary" onClick={()=>open('category')}>Add category</Button>}
+         {kind==='expenses'&&owner&&<Button variant="secondary" onClick={()=>open('category')}>Add Spending Type</Button>}
        </div>
      </div>
      <Card>
-       <SectionTitle title={`${f.title} history`} subtitle={`${result.count} matching records · 25 per page`}/>
+       <SectionTitle title={kind==='sales'?'Previous Sales':kind==='purchases'?'Previous Purchases':kind==='expenses'?'Spending History':`${f.title} History`} subtitle={`${result.count} matching records · 25 per page`}/>
        {loading?<div className="empty" role="status">Loading records…</div>:error?<p className="auth-error" role="alert">{error}</p>:kind==='purchases'?(
          <>
            <div className="purchase-desktop-table">
              <Table rows={result.rows} columns={cols} onRow={row=>onDetail(row.id)}/>
            </div>
            <div className="purchase-mobile-cards">
-             {result.rows.length===0?<EmptyState title="No purchases recorded" description="Click 'Purchase raw material' to record material purchases."/>:result.rows.map(r=>{
+             {result.rows.length===0?<EmptyState title="No purchases recorded" description="Click 'Add New Purchase' to record material purchases."/>:result.rows.map(r=>{
                const summary=getPurchaseSummary(r);
                return (
                  <div className="purchase-card" key={r.id}>

@@ -185,13 +185,13 @@ export function calculateDelta(current, previous, isExpenseOrLiability = false, 
   const isFavorable = isExpenseOrLiability ? diff <= 0 : diff >= 0;
 
   let narrative = '';
-  const label = metricName || 'Value';
+  const cleanLabel = (metricName || 'performance').toLowerCase();
   if (direction === 'flat') {
-    narrative = `${label} remained steady compared with the previous period.`;
+    narrative = `Your ${cleanLabel} remained steady compared with the previous period.`;
   } else if (direction === 'up') {
-    narrative = `${label} increased by ${percent}% compared with the previous period${isExpenseOrLiability ? ' (unfavourable)' : ''}.`;
+    narrative = `Your ${cleanLabel} was ${percent}% higher than last period (increased by ${percent}%)${isExpenseOrLiability ? ' (unfavourable)' : ''}.`;
   } else {
-    narrative = `${label} decreased by ${percent}% compared with the previous period${isExpenseOrLiability ? ' (favourable)' : ''}.`;
+    narrative = `Your ${cleanLabel} was ${percent}% lower than last period (decreased by ${percent}%)${isExpenseOrLiability ? ' (favourable)' : ''}.`;
   }
 
   return {

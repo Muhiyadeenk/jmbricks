@@ -291,7 +291,7 @@ export default function SalesInvoice({
         {/* ── TOP ACTION BAR (Hidden during print) ─────────────────────────── */}
         <div className="a4-invoice-actions no-print">
           <div className="a4-invoice-actions-left">
-            <span className="invoice-tag">PREVIEW · A4 INVOICE</span>
+            <span className="invoice-tag">PREVIEW · SALES BILL</span>
             <span className="invoice-badge">
               {isPaid ? '✓ PAID' : isPartial ? '⏳ PARTIALLY PAID' : '⚠️ UNPAID'}
             </span>
@@ -328,7 +328,7 @@ export default function SalesInvoice({
               <Download size={16} />
               {isDownloading ? 'Downloading…' : 'Download PDF'}
             </Button>
-            <Button onClick={handlePrintAction} title="Print Invoice">
+            <Button onClick={handlePrintAction} title="Print Bill">
               <Printer size={16} /> Print Invoice
             </Button>
           </div>
@@ -456,9 +456,9 @@ function InvoiceSheet({
           </div>
         </div>
         <div className="invoice-title-block">
-          <span className="tax-invoice-label">TAX INVOICE</span>
+          <span className="tax-invoice-label">SALES BILL</span>
           <div className="invoice-number-box">
-            <span className="inv-label">INVOICE NO</span>
+            <span className="inv-label">BILL NO</span>
             <strong className="inv-val">S-{record.receipt_number || record.id?.slice(0, 8)}</strong>
           </div>
         </div>
@@ -469,7 +469,7 @@ function InvoiceSheet({
       {/* INVOICE & CUSTOMER INFO GRID */}
       <div className="invoice-info-grid">
         <div className="invoice-info-col bill-to">
-          <span className="info-section-title">BILLED TO</span>
+          <span className="info-section-title">CUSTOMER INFORMATION</span>
           <div className="info-detail-name">{customerName}</div>
           {customerLocation && (
             <div className="info-detail-item">
@@ -487,7 +487,7 @@ function InvoiceSheet({
             <div className="info-detail-item" style={{ marginTop: '2px' }}>
               <MapPin size={13} className="info-icon" color="#1a6640" />
               <span>
-                <strong>Delivery Sites: </strong>
+                <strong>Delivery Places: </strong>
                 {Array.from(new Set([
                   primaryLocation,
                   customerLocation,
@@ -500,13 +500,13 @@ function InvoiceSheet({
         </div>
 
         <div className="invoice-info-col invoice-meta">
-          <span className="info-section-title">INVOICE DETAILS</span>
+          <span className="info-section-title">BILL DETAILS</span>
           <div className="info-meta-row">
-            <span className="meta-label">Invoice Date:</span>
+            <span className="meta-label">Bill Date:</span>
             <strong className="meta-val">{formatDateDisplay(record.sale_date)}</strong>
           </div>
           <div className="info-meta-row">
-            <span className="meta-label">Payment Status:</span>
+            <span className="meta-label">Payment Details:</span>
             <span className={`status-pill ${isPaid ? 'status-paid' : isPartial ? 'status-partial' : 'status-unpaid'}`}>
               {isPaid ? 'PAID' : isPartial ? 'PARTIALLY PAID' : 'UNPAID'}
             </span>
@@ -530,9 +530,9 @@ function InvoiceSheet({
               <th style={{ width: '5%', textAlign: 'center' }}>#</th>
               <th style={{ width: '15%' }}>Date</th>
               <th style={{ width: '38%' }}>Brick Size / Description</th>
-              <th style={{ width: '14%', textAlign: 'right' }}>Quantity</th>
-              <th style={{ width: '13%', textAlign: 'right' }}>Rate (₹)</th>
-              <th style={{ width: '15%', textAlign: 'right' }}>Amount (₹)</th>
+              <th style={{ width: '14%', textAlign: 'right' }}>Bricks Sold</th>
+              <th style={{ width: '13%', textAlign: 'right' }}>Price per Brick (₹)</th>
+              <th style={{ width: '15%', textAlign: 'right' }}>Total (₹)</th>
             </tr>
           </thead>
           <tbody>
@@ -686,7 +686,7 @@ function InvoiceSheet({
         {/* Right financial totals */}
         <div className="invoice-summary-right">
           <div className="summary-row">
-            <span className="summary-label">Subtotal:</span>
+            <span className="summary-label">Total Price:</span>
             <span className="summary-value">{currency(subtotal, currencyCode)}</span>
           </div>
 

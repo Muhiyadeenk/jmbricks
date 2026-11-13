@@ -4,7 +4,7 @@ export const formats = {
   sales: { table: 'sales_history', date: 'sale_date', search: 'customer_name', operation: 'sale', title: 'Sales' },
   purchases: { table: 'purchases_history', date: 'purchase_date', search: 'supplier_name', operation: 'purchase', title: 'Purchases' },
   production: { table: 'production_history', date: 'production_date', search: 'product_name', operation: 'production', title: 'Production' },
-  expenses: { table: 'expenses_history', date: 'expense_date', search: 'description', operation: 'expense', title: 'Expenses' },
+  expenses: { table: 'expenses_history', date: 'expense_date', search: 'description', operation: 'expense', title: 'Spending' },
 };
 export function today(timezone) {
   const parts=new Intl.DateTimeFormat('en-GB',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());

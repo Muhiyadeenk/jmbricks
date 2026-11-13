@@ -502,7 +502,7 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
 
   // ── Main Raw Material Purchase Form ────────────────────────────────────────
   return (
-    <Dialog title="Purchase Raw Material" onClose={onClose}>
+    <Dialog title="Add New Purchase" onClose={onClose}>
       <form onSubmit={handlePrepare} className="raw-material-purchase-form">
         <p className="help" style={{ marginBottom: '14px', fontSize: '14px', color: '#4a6252' }}>
           Record raw materials received for brick production (Cement, Sand, Quarry Dust, etc.). This automatically updates raw material inventory.
@@ -671,7 +671,7 @@ export default function PurchaseForm({ initial = {}, catalog, settings, onSubmit
             </select>
           </Field>
 
-          <Field label="Amount Paid (₹)">
+          <Field label="Money Paid (₹)">
             <input
               type="number"
               min="0"

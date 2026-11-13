@@ -71,7 +71,7 @@ export function OverviewSection({ data, prevData, deltas, settings, onTabChange 
           </div>
           <div className="card-main-metric">
             <strong>{currency(s.revenue, settings.currency)}</strong>
-            <span className="metric-sublabel">Total Sales Revenue</span>
+            <span className="metric-sublabel">Total Sales</span>
           </div>
           <div className="card-metric-list">
             <div className="metric-row">
@@ -90,7 +90,7 @@ export function OverviewSection({ data, prevData, deltas, settings, onTabChange 
           <div className="card-narrative-footer">
             <p>{deltas.sales?.narrative || 'Sales revenue for the selected period.'}</p>
             <button type="button" className="card-link-btn" onClick={() => onTabChange('sales')}>
-              View Sales Analytics <ArrowRight size={13} />
+              View Sales Details <ArrowRight size={13} />
             </button>
           </div>
         </Card>
@@ -101,7 +101,7 @@ export function OverviewSection({ data, prevData, deltas, settings, onTabChange 
             <div className="card-title-group">
               <span className="card-icon-box dark-green"><Factory size={20} /></span>
               <div>
-                <h3>Brick Production</h3>
+                <h3>Bricks Made</h3>
                 <small>Manufacturing & cement sync</small>
               </div>
             </div>
@@ -133,7 +133,7 @@ export function OverviewSection({ data, prevData, deltas, settings, onTabChange 
           <div className="card-narrative-footer">
             <p>{deltas.production?.narrative || 'Production batches completed in this period.'}</p>
             <button type="button" className="card-link-btn" onClick={() => onTabChange('production')}>
-              View Production Analytics <ArrowRight size={13} />
+              View Production Details <ArrowRight size={13} />
             </button>
           </div>
         </Card>
@@ -176,7 +176,7 @@ export function OverviewSection({ data, prevData, deltas, settings, onTabChange 
           <div className="card-narrative-footer">
             <p>{deltas.purchases?.narrative || 'Raw material purchases recorded in this period.'}</p>
             <button type="button" className="card-link-btn" onClick={() => onTabChange('purchases')}>
-              View Purchase Analytics <ArrowRight size={13} />
+              View Purchase Details <ArrowRight size={13} />
             </button>
           </div>
         </Card>
@@ -187,7 +187,7 @@ export function OverviewSection({ data, prevData, deltas, settings, onTabChange 
             <div className="card-title-group">
               <span className="card-icon-box purple"><Wallet size={20} /></span>
               <div>
-                <h3>Operating Expenses</h3>
+                <h3>Total Money Spent</h3>
                 <small>Labour, fuel, power & yard upkeep</small>
               </div>
             </div>
@@ -200,7 +200,7 @@ export function OverviewSection({ data, prevData, deltas, settings, onTabChange 
           </div>
           <div className="card-main-metric">
             <strong>{currency(s.expenses, settings.currency)}</strong>
-            <span className="metric-sublabel">Total Operating Expenses</span>
+            <span className="metric-sublabel">Total Money Spent</span>
           </div>
           <div className="card-metric-list">
             <div className="metric-row">
@@ -229,8 +229,8 @@ export function OverviewSection({ data, prevData, deltas, settings, onTabChange 
       <div className="report-charts-grid">
         <Card className="chart-card">
           <SectionTitle
-            title="Revenue & Cash Collection Trend"
-            subtitle={`Comparing invoiced revenue with cash collected · ${settings.currency}`}
+            title="Sales and Money Received"
+            subtitle={`Comparing total sales with money received · ${settings.currency}`}
           />
           <div className="chart-container" style={{ height: 260 }}>
             {data?.daily && data.daily.length > 0 ? (
@@ -242,7 +242,7 @@ export function OverviewSection({ data, prevData, deltas, settings, onTabChange 
                   <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #E5EBE6', boxShadow: '0 4px 14px rgba(0,0,0,0.06)' }} formatter={v => currency(v, settings.currency)} />
                   <Legend wrapperStyle={{ paddingTop: '6px' }} />
                   <Bar name="Sales Revenue" dataKey="revenue" fill="#176B48" radius={[4, 4, 0, 0]} />
-                  <Bar name="Cash Collected" dataKey="collected" fill="#25D366" radius={[4, 4, 0, 0]} />
+                  <Bar name="Money Received" dataKey="collected" fill="#25D366" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -253,7 +253,7 @@ export function OverviewSection({ data, prevData, deltas, settings, onTabChange 
 
         <Card className="chart-card">
           <SectionTitle
-            title="Sales vs Production Comparison"
+            title="Sales vs Bricks Made"
             subtitle="Comparing total bricks manufactured vs delivered to customers"
           />
           <div className="chart-container" style={{ height: 260 }}>
@@ -326,7 +326,7 @@ export function SalesSection({ data, settings }) {
           <strong>{Number(s.bricks_sold || s.bricksSold || 0).toLocaleString()}</strong>
         </div>
         <div className="kpi-strip-item">
-          <span>Cash Collected:</span>
+          <span>Money Received:</span>
           <strong className="text-green">{currency(s.collected, settings.currency)}</strong>
         </div>
         <div className="kpi-strip-item">
@@ -346,7 +346,7 @@ export function SalesSection({ data, settings }) {
       {/* Sales by Brick Size Table */}
       <Card>
         <SectionTitle
-          title="Sales by Brick Size"
+          title="Bricks Sold by Size"
           subtitle="Breakdown of volume, net revenue and average realization per brick size"
         />
         {bySize.length > 0 ? (
@@ -408,7 +408,7 @@ export function SalesSection({ data, settings }) {
                   <th style={{ textAlign: 'center' }}>Invoices</th>
                   <th style={{ textAlign: 'right' }}>Total Sales</th>
                   <th style={{ textAlign: 'right' }}>Amount Received</th>
-                  <th style={{ textAlign: 'right' }}>Outstanding Balance</th>
+                  <th style={{ textAlign: 'right' }}>Remaining Amount</th>
                   <th style={{ textAlign: 'center' }}>Status</th>
                 </tr>
               </thead>
@@ -452,7 +452,7 @@ export function SalesSection({ data, settings }) {
                   <th>Invoice / Receipt #</th>
                   <th>Customer</th>
                   <th>Items & Sizes</th>
-                  <th style={{ textAlign: 'right' }}>Total Amount</th>
+                  <th style={{ textAlign: 'right' }}>Total Purchase Amount</th>
                   <th style={{ textAlign: 'right' }}>Received</th>
                   <th style={{ textAlign: 'right' }}>Balance</th>
                 </tr>
@@ -516,7 +516,7 @@ export function ProductionSection({ data, settings }) {
       {/* Production by Brick Size Table */}
       <Card>
         <SectionTitle
-          title="Production by Brick Size"
+          title="Bricks Made by Size"
           subtitle="Detailed breakdown of output, rejection counts, sales and remaining available stock"
         />
         {bySize.length > 0 ? (
@@ -528,7 +528,7 @@ export function ProductionSection({ data, settings }) {
                   <th style={{ textAlign: 'right' }}>Total Produced</th>
                   <th style={{ textAlign: 'right' }}>Rejected</th>
                   <th style={{ textAlign: 'right' }}>Net Good Bricks</th>
-                  <th style={{ textAlign: 'right' }}>Sold in Period</th>
+                  <th style={{ textAlign: 'right' }}>Bricks Sold</th>
                   <th style={{ textAlign: 'right' }}>Available Stock</th>
                 </tr>
               </thead>
@@ -569,10 +569,10 @@ export function ProductionSection({ data, settings }) {
           <table>
             <thead>
               <tr>
-                <th>Raw Material</th>
+                <th>Material Name</th>
                 <th>Standard Unit</th>
                 <th style={{ textAlign: 'right' }}>Purchased in Period</th>
-                <th style={{ textAlign: 'right' }}>Consumed in Production</th>
+                <th style={{ textAlign: 'right' }}>Materials Used in Production</th>
                 <th style={{ textAlign: 'right' }}>Current Stock Available</th>
               </tr>
             </thead>
@@ -601,7 +601,7 @@ export function ProductionSection({ data, settings }) {
       {batches.length > 0 && (
         <Card>
           <SectionTitle
-            title="Production Register Entries"
+            title="Previous Production Records"
             subtitle={`${batches.length} completed production runs in this period`}
           />
           <div className="table-wrap">
@@ -680,7 +680,7 @@ export function PurchaseSection({ data, settings }) {
       {/* Purchases by Raw Material Table */}
       <Card>
         <SectionTitle
-          title="Purchases by Raw Material"
+          title="Materials Purchased"
           subtitle="Breakdown of raw materials bought, total amounts paid and supplier outstanding balances"
         />
         {byMaterial.length > 0 ? (
@@ -691,7 +691,7 @@ export function PurchaseSection({ data, settings }) {
                   <th>Raw Material</th>
                   <th style={{ textAlign: 'right' }}>Total Quantity</th>
                   <th style={{ textAlign: 'right' }}>Total Amount</th>
-                  <th style={{ textAlign: 'right' }}>Amount Paid</th>
+                  <th style={{ textAlign: 'right' }}>Money Paid</th>
                   <th style={{ textAlign: 'right' }}>Outstanding Balance</th>
                 </tr>
               </thead>
@@ -815,7 +815,7 @@ export function ExpenseSection({ data, settings }) {
           <strong>{Number(s.expense_count || expenseRows.length || 0)} Entries</strong>
         </div>
         <div className="kpi-strip-item">
-          <span>Top Category:</span>
+          <span>Top Spending Type:</span>
           <strong className="text-purple">{s.top_expense_category || 'Labour / Operations'}</strong>
         </div>
         <div className="kpi-strip-item">
@@ -825,10 +825,10 @@ export function ExpenseSection({ data, settings }) {
       </div>
 
       <div className="report-charts-grid">
-        {/* Category Breakdown Table */}
+        {/* Spending Type Breakdown Table */}
         <Card>
           <SectionTitle
-            title="Expenses by Category"
+            title="Spending by Type"
             subtitle="Categorized operating expenses incurred in the selected period"
           />
           {categories.length > 0 ? (
@@ -836,7 +836,7 @@ export function ExpenseSection({ data, settings }) {
               <table>
                 <thead>
                   <tr>
-                    <th>Category</th>
+                    <th>Spending Type</th>
                     <th style={{ textAlign: 'right' }}>Amount</th>
                     <th style={{ textAlign: 'right' }}>% of Total</th>
                     <th style={{ textAlign: 'center' }}>Entries</th>
@@ -866,7 +866,7 @@ export function ExpenseSection({ data, settings }) {
         {/* Visual Expense Share Chart */}
         <Card className="chart-card">
           <SectionTitle
-            title="Expense Share by Category"
+            title="Expense Share by Spending Type"
             subtitle="Proportional breakdown of operating expenditure"
           />
           <div className="chart-container" style={{ height: 260 }}>
@@ -903,7 +903,7 @@ export function ExpenseSection({ data, settings }) {
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>Category</th>
+                  <th>Spending Type</th>
                   <th>Description</th>
                   <th style={{ textAlign: 'right' }}>Amount</th>
                   <th style={{ textAlign: 'center' }}>Payment Method</th>
@@ -966,7 +966,7 @@ export function FinancialSection({ data, settings }) {
 
           <div className="income-statement-rows">
             <div className="income-row header-row">
-              <span>Gross Sales Revenue (Invoiced)</span>
+              <span>Total Sales</span>
               <strong>{currency(grossRev, settings.currency)}</strong>
             </div>
 
@@ -976,14 +976,14 @@ export function FinancialSection({ data, settings }) {
             </div>
 
             <div className="income-row net-row">
-              <strong>(=) Net Sales Revenue</strong>
+              <strong>(=) Sales After Discount</strong>
               <strong className="text-green">{currency(netRev, settings.currency)}</strong>
             </div>
 
             <div className="income-divider" />
 
             <div className="income-row">
-              <span>Actual Cash Collected from Customers</span>
+              <span>Actual Money Received from Customers</span>
               <strong className="text-green">{currency(cashIn, settings.currency)}</strong>
             </div>
 
@@ -1012,7 +1012,7 @@ export function FinancialSection({ data, settings }) {
             <div className="income-divider" />
 
             <div className="income-row">
-              <span>Total Operating Expenses (Labour, Power, Fuel)</span>
+              <span>Total Money Spent (Labour, Power, Fuel)</span>
               <strong className="text-purple">{currency(expensesTotal, settings.currency)}</strong>
             </div>
 
@@ -1021,7 +1021,7 @@ export function FinancialSection({ data, settings }) {
             {/* Operating Profit */}
             <div className="income-row profit-box">
               <div>
-                <strong>Estimated Operating Profit</strong>
+                <strong>Remaining Profit</strong>
                 <small>Calculated from verified production cost of bricks sold + reviewed operating costs</small>
               </div>
               <strong className={estimatedProfit != null && estimatedProfit >= 0 ? 'text-green' : 'text-amber'}>
@@ -1105,7 +1105,7 @@ export function ComparisonSection({ data, prevData, deltas, periodDates, setting
     },
     {
       id: 'collected',
-      title: 'Cash Collected',
+      title: 'Money Received',
       current: s.collected,
       previous: prevS.collected,
       format: v => currency(v, settings.currency),
@@ -1145,7 +1145,7 @@ export function ComparisonSection({ data, prevData, deltas, periodDates, setting
     },
     {
       id: 'expenses',
-      title: 'Operating Expenses',
+      title: 'Total Money Spent',
       current: s.expenses,
       previous: prevS.expenses,
       format: v => currency(v, settings.currency),
@@ -1198,7 +1198,7 @@ export function ComparisonSection({ data, prevData, deltas, periodDates, setting
                   <strong className="comp-val-number">{m.format(m.current)}</strong>
                 </div>
                 <div className="comp-val-col previous">
-                  <span className="comp-val-label">Previous Period</span>
+                  <span className="comp-val-label">Last Period</span>
                   <strong className="comp-val-number muted">{m.format(m.previous)}</strong>
                 </div>
               </div>

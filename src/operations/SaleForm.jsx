@@ -888,7 +888,7 @@ export default function SaleForm({
             {currency(review.total, settings.currency)}
           </dd>
 
-          <dt>Amount Received</dt>
+          <dt>Money Received</dt>
           <dd>
             {currency(review.paid, settings.currency)}
             {Number(review.paid) > 0 && <span style={{ fontSize: '12px', color: '#526e5a' }}> ({review.payment_method})</span>}
@@ -926,7 +926,7 @@ export default function SaleForm({
   // ── Main New Sale Form ────────────────────────────────────────────────────
   return (
     <>
-      <Dialog title={isEditMode ? `Edit Sales Bill #${initial.receiptNumber}` : 'New Sale'} onClose={onClose}>
+      <Dialog title={isEditMode ? `Edit Sales Bill #${initial.receiptNumber}` : 'Add New Sale'} onClose={onClose}>
         <form onSubmit={handleReview}>
           <div className="sale-top-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', background: isEditMode ? '#fef9f0' : '#f5f9f6', padding: '10px 14px', borderRadius: '10px', border: isEditMode ? '1.5px solid #ebd5b3' : '1.5px solid #dce8de' }}>
             <span style={{ fontSize: '13px', fontWeight: 700, color: isEditMode ? '#b54708' : '#1a6640', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -958,7 +958,7 @@ export default function SaleForm({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
               <span style={{ fontSize: '13px', fontWeight: 700, color: '#254430', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                Customer Details
+                Customer Information
               </span>
               {!selectedCustomer && (
                 <button
@@ -1037,9 +1037,9 @@ export default function SaleForm({
                       gap: '5px',
                       cursor: 'pointer'
                     }}
-                    title="Edit customer details"
+                    title="Edit customer information"
                   >
-                    <Edit3 size={14} /> Edit Customer
+                    <Edit3 size={14} /> Edit Information
                   </button>
                   <button
                     type="button"
@@ -1285,7 +1285,7 @@ export default function SaleForm({
 
           {/* ── OPTIONAL DELIVERY LOCATION ────────────────────────────────────── */}
           <div style={{ margin: '14px 0 16px' }}>
-            <Field label="Delivery Location (Optional)">
+            <Field label="Delivery Place (Optional)">
               <input
                 type="text"
                 placeholder={selectedCustomer?.location ? `Defaults to: ${selectedCustomer.location}` : "e.g. Site 1, Kunnumpuram (defaults to customer place)"}
@@ -1348,7 +1348,7 @@ export default function SaleForm({
 
                     <div className="form-grid" style={{ marginTop: '10px', gap: '12px' }}>
                       <Field
-                        label="Quantity (Bricks)"
+                        label="Bricks Sold"
                         type="number"
                         min="1"
                         step="1"
@@ -1404,7 +1404,7 @@ export default function SaleForm({
               onClick={addItem}
               style={{ minHeight: '40px', width: '100%', justifyContent: 'center', marginTop: '8px', fontSize: '13.5px' }}
             >
-              <Plus size={15} /> Add Another Brick Size
+              <Plus size={15} /> Add Another Brick
             </Button>
           </div>
 
@@ -1548,7 +1548,7 @@ export default function SaleForm({
               />
 
               <Field
-                label="Amount Received (₹)"
+                label="Money Received (₹)"
                 type="number"
                 min="0"
                 step="0.01"
@@ -1589,7 +1589,7 @@ export default function SaleForm({
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', alignItems: 'center' }}>
                 <div>
-                  <span style={{ fontSize: '11.5px', color: '#526e5a', fontWeight: 600, display: 'block' }}>Subtotal</span>
+                  <span style={{ fontSize: '11.5px', color: '#526e5a', fontWeight: 600, display: 'block' }}>Total Price</span>
                   <span style={{ fontSize: '16px', fontWeight: 700, color: '#132e1e' }}>
                     {currency(summary?.subtotal || 0, settings.currency)}
                   </span>
@@ -1730,7 +1730,7 @@ export default function SaleForm({
 
       {/* ── EDIT CUSTOMER MODAL ─────────────────────────────────────────────── */}
       {showEditCustomerModal && selectedCustomer && (
-        <Dialog title="Edit Customer Details" onClose={() => setShowEditCustomerModal(false)}>
+        <Dialog title="Edit Customer Information" onClose={() => setShowEditCustomerModal(false)}>
           <form onSubmit={handleSaveEditCustomer}>
             <div className="notice" style={{ background: '#edf5ef', borderColor: '#b8dabf', color: '#164a2c' }}>
               <strong>✏️ Update Customer Information</strong>

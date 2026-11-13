@@ -109,8 +109,8 @@ function Chart({ rows, settings, title }) {
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#6B7F74' }} width={65} />
               <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #E5EBE6', boxShadow: '0 4px 14px rgba(0,0,0,0.06)' }} formatter={v => currency(v, settings.currency)} />
               <Legend wrapperStyle={{ paddingTop: '8px' }} />
-              <Bar name="Revenue" dataKey="revenue" fill="#176B48" radius={[5, 5, 0, 0]} />
-              <Bar name="Cash collected" dataKey="collected" fill="#A8D5BC" radius={[5, 5, 0, 0]} />
+              <Bar name="Total Sales" dataKey="revenue" fill="#176B48" radius={[5, 5, 0, 0]} />
+              <Bar name="Money Received" dataKey="collected" fill="#A8D5BC" radius={[5, 5, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -165,24 +165,24 @@ export function LiveDashboard({ settings, revision, onDetail }) {
     <>
       <div className="stats-grid report-stats">
         {[
-          ["Today's sales", currency(day?.revenue, settings.currency), ShoppingBag, 'Net of discounts', 'green'],
-          ["Today's expenses", currency(expenseToday, settings.currency), Wallet, 'Recorded operating expense entries', 'neutral'],
-          ['Available bricks', Number(s.bricks || 0).toLocaleString(), Package, 'Finished bricks; materials shown separately', 'green'],
-          ['Customers owe', currency(s.customer_due, settings.currency), Users, 'All unpaid sales through today', 'amber'],
-          ['Suppliers owed', currency(s.supplier_due, settings.currency), Truck, 'All unpaid purchases through today', 'neutral'],
-          ['Low-stock alerts', s.low_stock || 0, AlertTriangle, 'Active inventory at or below minimum', Number(s.low_stock) > 0 ? 'amber' : 'green']
+          ["Today's Sales", currency(day?.revenue, settings.currency), ShoppingBag, 'After Discount', 'green'],
+          ["Today's Spending", currency(expenseToday, settings.currency), Wallet, 'Recorded spending entries', 'neutral'],
+          ['Bricks in Stock', Number(s.bricks || 0).toLocaleString(), Package, 'Ready Bricks Available', 'green'],
+          ['Money Customers Have to Pay', currency(s.customer_due, settings.currency), Users, 'All unpaid sales through today', 'amber'],
+          ['Money We Have to Pay', currency(s.supplier_due, settings.currency), Truck, 'All unpaid purchases through today', 'neutral'],
+          ['Items Running Low', s.low_stock || 0, AlertTriangle, 'Items That Need Restocking', Number(s.low_stock) > 0 ? 'amber' : 'green']
         ].map(([label, value, icon, foot, tone]) => (
           <StatCard key={label} {...{ label, value, icon, foot, tone }} />
         ))}
       </div>
       <div className="connection-grid">
-        <Chart rows={week} settings={settings} title="Weekly sales · last 7 days" />
-        <Chart rows={groupSales(d.daily || [], 'monthly')} settings={settings} title="Monthly sales · last 6 months" />
+        <Chart rows={week} settings={settings} title="Sales This Week" />
+        <Chart rows={groupSales(d.daily || [], 'monthly')} settings={settings} title="Sales This Month" />
       </div>
       <div className="connection-grid">
         {[
-          ['recent_sales', 'Recent sales', 'sales'],
-          ['recent_purchases', 'Recent purchases', 'purchases']
+          ['recent_sales', 'Previous Sales', 'sales'],
+          ['recent_purchases', 'Previous Purchases', 'purchases']
         ].map(([key, title, kind]) => (
           <Card key={key}>
             <SectionTitle title={title} action={<Link className="text-link" to={`/${kind}`}>View all</Link>} />
@@ -197,8 +197,8 @@ export function LiveDashboard({ settings, revision, onDetail }) {
       </div>
       <Card>
         <SectionTitle
-          title="Stock by brick product"
-          subtitle="Distinct product codes remain separate, including matching size labels."
+          title="Bricks in Stock"
+          subtitle="Ready Bricks Available"
           action={<Link className="text-link" to="/stock">Manage stock</Link>}
         />
         <ReportTable
@@ -757,14 +757,14 @@ export default function Reports({ settings, revision, owner, previewLoader, prev
       {/* ── REPORT NAVIGATION TABS ─────────────────────────────────────────── */}
       <div className="report-tabs-nav no-print">
         {[
-          ['overview', '📊 Overview'],
-          ['sales', '🛍️ Sales Report'],
-          ['production', '🏭 Production Report'],
-          ['purchases', '🛒 Purchases Report'],
-          ['expenses', '💼 Expense Report'],
-          ['financial', '💰 Financial Summary'],
-          ['comparison', '📈 Period Comparison'],
-          ['all', '📑 Complete View']
+          ['overview', '📊 Business Summary'],
+          ['sales', '🛍️ Sales Details'],
+          ['production', '🏭 Production Details'],
+          ['purchases', '🛒 Purchase Details'],
+          ['expenses', '💼 Spending Details'],
+          ['financial', '💰 Money Summary'],
+          ['comparison', '📈 Compare Results'],
+          ['all', '📑 All Details']
         ].map(([tabKey, tabLabel]) => (
           <button
             key={tabKey}

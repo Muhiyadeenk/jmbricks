@@ -5,7 +5,7 @@ import { Button, Card, Field, Badge, EmptyState, SectionTitle } from './componen
 import { supabase } from './lib/supabase';
 import { useAuth } from './auth/AuthProvider';
 import Operations from './operations/Operations';
-const pages = [ ['Dashboard','/',LayoutDashboard], ['Sales','/sales',ShoppingBag], ['Purchases','/purchases',ShoppingCart], ['Stock Management','/stock',Package], ['Production','/production',Factory], ['Expenses','/expenses',Wallet], ['Reports','/reports',ChartNoAxesCombined], ['Settings','/settings',Settings] ];
+const pages = [ ['Dashboard','/',LayoutDashboard], ['Sales','/sales',ShoppingBag], ['Purchases','/purchases',ShoppingCart], ['Stock','/stock',Package], ['Production','/production',Factory], ['Spending','/expenses',Wallet], ['Reports','/reports',ChartNoAxesCombined], ['Settings','/settings',Settings] ];
 const bottomNavPages = [ ['Home','/',LayoutDashboard], ['Sales','/sales',ShoppingBag], ['Production','/production',Factory], ['Stock','/stock',Package] ];
 export default function ConnectedWorkspace() {
   const { session, signOut } = useAuth();
@@ -23,9 +23,9 @@ export default function ConnectedWorkspace() {
     '/': 'Dashboard',
     '/sales': 'Sales',
     '/purchases': 'Purchases',
-    '/stock': 'Stock Management',
+    '/stock': 'Stock',
     '/production': 'Production',
-    '/expenses': 'Expenses',
+    '/expenses': 'Spending',
     '/reports': 'Reports',
     '/settings': 'Settings'
   };
@@ -68,7 +68,7 @@ export default function ConnectedWorkspace() {
         <div className="sidebar-brand-row">
           <NavLink to="/" className="brand" onClick={() => setMobile(false)}>
             <span className="jm-logo"><img src="/jm-bricks-logo.png" alt="JM Bricks logo" /></span>
-            <span className="brand-text">JM BRICKS<small>BUSINESS MANAGER</small></span>
+            <span className="brand-text">JM BRICKS<small>BUSINESS MANAGEMENT</small></span>
           </NavLink>
           <button className="icon-button mobile-close-btn" onClick={() => setMobile(false)} aria-label="Close navigation">
             <X size={20} />
