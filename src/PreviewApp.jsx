@@ -82,7 +82,7 @@ export default function PreviewApp(){
             </div>
           </div>
           <div className="header-right">
-            <Badge tone="neutral">Demo Preview Mode</Badge>
+            <span className="preview-mode-badge"><Badge tone="neutral">Demo Preview Mode</Badge></span>
             <div className="avatar small">JM</div>
           </div>
         </header>
@@ -102,9 +102,9 @@ export default function PreviewApp(){
                     <CalendarDays size={18} color="#176B48" />
                     <span>12 October 2026</span>
                   </div>
-                  <button className="btn secondary" style={{ minHeight: '38px', padding: '6px 12px', fontSize: '12.5px' }} onClick={()=>setEmpty(!empty)}>
-                    {empty ? 'Show sample data' : 'View empty state'}
-                  </button>
+                  <Button variant="secondary" className="dashboard-refresh-btn" onClick={()=>setEmpty(!empty)}>
+                    <span>{empty ? 'Show sample data' : 'View empty state'}</span>
+                  </Button>
                 </div>
               </div>
 
