@@ -168,7 +168,7 @@ export default function Operations({profile,settings}) {
                 <span>{getGreeting()}</span>
               </div>
               <h1 className="dashboard-greeting-title">Welcome to JM BRICKS Business Management</h1>
-              <p className="dashboard-greeting-sub">Track daily production, sales, stock, and business spending.</p>
+              <p className="dashboard-greeting-sub">Track daily production, sales, stock, and business expenses.</p>
             </div>
             <div className="dashboard-banner-right">
               <div className="dashboard-date-badge">
@@ -199,7 +199,7 @@ export default function Operations({profile,settings}) {
               </Button>
               <Button variant="secondary" disabled={!canWrite} onClick={() => open('expense')}>
                 <Wallet size={16} />
-                <span>Add Spending</span>
+                <span>Add Expense</span>
               </Button>
             </div>
           </div>
@@ -218,7 +218,7 @@ export default function Operations({profile,settings}) {
         <>
           <div className="operations-heading">
             <div>
-              <span className="eyebrow">{page === 'stock' ? 'STOCK' : page === 'expenses' ? 'SPENDING' : page.toUpperCase()}</span>
+              <span className="eyebrow">{page === 'stock' ? 'STOCK' : page === 'expenses' ? 'EXPENSES' : page.toUpperCase()}</span>
               <h1>{page === 'stock' ? 'Stock' : formats[page]?.title || (page === 'production' ? 'Production Records' : 'Reports')}</h1>
               <p>{page === 'production' ? 'Record daily brick production and automatically sync cement stock.' : `Business records · ${displayDate(today(settings.timezone))}`}</p>
             </div>
@@ -518,10 +518,10 @@ function HistoryPage({kind,revision,catalog,settings,canWrite,owner,open,onDetai
    );
  }
  if(kind==='production')cols.push({key:'quantity_produced',label:'Produced'},{key:'rejected_quantity',label:'Rejected'},{key:'net_quantity',label:'Net quantity'});
- else cols.push({key:kind==='expenses'?'amount':'total',label:kind==='sales'?'Total Sales':kind==='purchases'?'Total Purchase Amount':'Total Money Spent',render:r=>currency(kind==='expenses'?r.amount:r.total,r.currency)});
+ else cols.push({key:kind==='expenses'?'amount':'total',label:kind==='sales'?'Total Sales':kind==='purchases'?'Total Purchase Amount':'Total Expense',render:r=>currency(kind==='expenses'?r.amount:r.total,r.currency)});
  if(kind==='purchases')cols.push({key:'payment_status',label:'Payment Details',render:r=>getPaymentBadge(r)});
  if(['sales','purchases'].includes(kind))cols.push({key:'outstanding_balance',label:kind==='sales'?'Remaining Amount':'Remaining Payment',render:r=><Badge tone={Number(r.outstanding_balance)>0?'amber':'green'}>{currency(r.outstanding_balance,r.currency)}</Badge>});
- if(kind==='expenses')cols.push({key:'category_name',label:'Spending Type'});
+ if(kind==='expenses')cols.push({key:'category_name',label:'Category'});
  cols.push({key:'status',label:'Status',render:r=><Badge tone={r.deleted_at?'neutral':'green'}>{r.deleted_at?'Deleted':'Active'}</Badge>});
  if(kind==='sales'){
   cols.push({
@@ -561,14 +561,14 @@ function HistoryPage({kind,revision,catalog,settings,canWrite,owner,open,onDetai
            <Search size={18}/>
            <input aria-label="Search records" placeholder={`Search ${kind==='sales'?'customers':kind==='purchases'?'suppliers':kind==='production'?'products':'descriptions'}…`} value={filters.search} onChange={e=>change('search',e.target.value)}/>
          </div>
-         {kind==='expenses'&&<select aria-label="Spending type" value={filters.category} onChange={e=>change('category',e.target.value)}><option value="">All Spending Types</option>{catalog.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
+         {kind==='expenses'&&<select aria-label="Expense category" value={filters.category} onChange={e=>change('category',e.target.value)}><option value="">All Categories</option>{catalog.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
          <select aria-label="Record status" value={filters.status} onChange={e=>change('status',e.target.value)}><option value="active">Active entries</option><option value="deleted">Deleted entries</option><option value="all">All entries</option></select>
          {canWrite&&<Button onClick={()=>open(f.operation)}><Plus size={16}/>{titles[f.operation]}</Button>}
-         {kind==='expenses'&&owner&&<Button variant="secondary" onClick={()=>open('category')}>Add Spending Type</Button>}
+         {kind==='expenses'&&owner&&<Button variant="secondary" onClick={()=>open('category')}>Add Expense Category</Button>}
        </div>
      </div>
      <Card>
-       <SectionTitle title={kind==='sales'?'Previous Sales':kind==='purchases'?'Previous Purchases':kind==='expenses'?'Spending History':`${f.title} History`} subtitle={`${result.count} matching records · 25 per page`}/>
+       <SectionTitle title={kind==='sales'?'Previous Sales':kind==='purchases'?'Previous Purchases':kind==='expenses'?'Expense History':`${f.title} History`} subtitle={`${result.count} matching records · 25 per page`}/>
        {loading?<div className="empty" role="status">Loading records…</div>:error?<p className="auth-error" role="alert">{error}</p>:kind==='purchases'?(
          <>
            <div className="purchase-desktop-table">

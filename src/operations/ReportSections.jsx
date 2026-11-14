@@ -187,7 +187,7 @@ export function OverviewSection({ data, prevData, deltas, settings, onTabChange 
             <div className="card-title-group">
               <span className="card-icon-box purple"><Wallet size={20} /></span>
               <div>
-                <h3>Total Money Spent</h3>
+                <h3>Total Expenses</h3>
                 <small>Labour, fuel, power & yard upkeep</small>
               </div>
             </div>
@@ -200,7 +200,7 @@ export function OverviewSection({ data, prevData, deltas, settings, onTabChange 
           </div>
           <div className="card-main-metric">
             <strong>{currency(s.expenses, settings.currency)}</strong>
-            <span className="metric-sublabel">Total Money Spent</span>
+            <span className="metric-sublabel">Total Expenses</span>
           </div>
           <div className="card-metric-list">
             <div className="metric-row">
@@ -815,7 +815,7 @@ export function ExpenseSection({ data, settings }) {
           <strong>{Number(s.expense_count || expenseRows.length || 0)} Entries</strong>
         </div>
         <div className="kpi-strip-item">
-          <span>Top Spending Type:</span>
+          <span>Top Expense Category:</span>
           <strong className="text-purple">{s.top_expense_category || 'Labour / Operations'}</strong>
         </div>
         <div className="kpi-strip-item">
@@ -825,10 +825,10 @@ export function ExpenseSection({ data, settings }) {
       </div>
 
       <div className="report-charts-grid">
-        {/* Spending Type Breakdown Table */}
+        {/* Expense Category Breakdown Table */}
         <Card>
           <SectionTitle
-            title="Spending by Type"
+            title="Expenses by Category"
             subtitle="Categorized operating expenses incurred in the selected period"
           />
           {categories.length > 0 ? (
@@ -836,7 +836,7 @@ export function ExpenseSection({ data, settings }) {
               <table>
                 <thead>
                   <tr>
-                    <th>Spending Type</th>
+                    <th>Expense Category</th>
                     <th style={{ textAlign: 'right' }}>Amount</th>
                     <th style={{ textAlign: 'right' }}>% of Total</th>
                     <th style={{ textAlign: 'center' }}>Entries</th>
@@ -866,7 +866,7 @@ export function ExpenseSection({ data, settings }) {
         {/* Visual Expense Share Chart */}
         <Card className="chart-card">
           <SectionTitle
-            title="Expense Share by Spending Type"
+            title="Expense Share by Category"
             subtitle="Proportional breakdown of operating expenditure"
           />
           <div className="chart-container" style={{ height: 260 }}>
@@ -903,7 +903,7 @@ export function ExpenseSection({ data, settings }) {
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>Spending Type</th>
+                  <th>Category</th>
                   <th>Description</th>
                   <th style={{ textAlign: 'right' }}>Amount</th>
                   <th style={{ textAlign: 'center' }}>Payment Method</th>
@@ -1012,7 +1012,7 @@ export function FinancialSection({ data, settings }) {
             <div className="income-divider" />
 
             <div className="income-row">
-              <span>Total Money Spent (Labour, Power, Fuel)</span>
+              <span>Total Expenses (Labour, Power, Fuel)</span>
               <strong className="text-purple">{currency(expensesTotal, settings.currency)}</strong>
             </div>
 
@@ -1145,7 +1145,7 @@ export function ComparisonSection({ data, prevData, deltas, periodDates, setting
     },
     {
       id: 'expenses',
-      title: 'Total Money Spent',
+      title: 'Total Expenses',
       current: s.expenses,
       previous: prevS.expenses,
       format: v => currency(v, settings.currency),

@@ -166,7 +166,7 @@ export function LiveDashboard({ settings, revision, onDetail }) {
       <div className="stats-grid report-stats">
         {[
           ["Today's Sales", currency(day?.revenue, settings.currency), ShoppingBag, 'After Discount', 'green'],
-          ["Today's Spending", currency(expenseToday, settings.currency), Wallet, 'Recorded spending entries', 'neutral'],
+          ["Today's Expenses", currency(expenseToday, settings.currency), Wallet, 'Recorded expense entries', 'neutral'],
           ['Bricks in Stock', Number(s.bricks || 0).toLocaleString(), Package, 'Ready Bricks Available', 'green'],
           ['Money Customers Have to Pay', currency(s.customer_due, settings.currency), Users, 'All unpaid sales through today', 'amber'],
           ['Money We Have to Pay', currency(s.supplier_due, settings.currency), Truck, 'All unpaid purchases through today', 'neutral'],
@@ -761,7 +761,7 @@ export default function Reports({ settings, revision, owner, previewLoader, prev
           ['sales', '🛍️ Sales Details'],
           ['production', '🏭 Production Details'],
           ['purchases', '🛒 Purchase Details'],
-          ['expenses', '💼 Spending Details'],
+          ['expenses', '💼 Expense Details'],
           ['financial', '💰 Money Summary'],
           ['comparison', '📈 Compare Results'],
           ['all', '📑 All Details']

@@ -5,7 +5,7 @@ import { Button, Card, Field, Badge, EmptyState, SectionTitle } from './componen
 import { supabase } from './lib/supabase';
 import { useAuth } from './auth/AuthProvider';
 import Operations from './operations/Operations';
-const pages = [ ['Dashboard','/',LayoutDashboard], ['Sales','/sales',ShoppingBag], ['Purchases','/purchases',ShoppingCart], ['Stock','/stock',Package], ['Production','/production',Factory], ['Spending','/expenses',Wallet], ['Reports','/reports',ChartNoAxesCombined], ['Settings','/settings',Settings] ];
+const pages = [ ['Dashboard','/',LayoutDashboard], ['Sales','/sales',ShoppingBag], ['Purchases','/purchases',ShoppingCart], ['Stock','/stock',Package], ['Production','/production',Factory], ['Expenses','/expenses',Wallet], ['Reports','/reports',ChartNoAxesCombined], ['Settings','/settings',Settings] ];
 const bottomNavPages = [ ['Home','/',LayoutDashboard], ['Sales','/sales',ShoppingBag], ['Production','/production',Factory], ['Stock','/stock',Package] ];
 export default function ConnectedWorkspace() {
   const { session, signOut } = useAuth();
@@ -25,7 +25,7 @@ export default function ConnectedWorkspace() {
     '/purchases': 'Purchases',
     '/stock': 'Stock',
     '/production': 'Production',
-    '/expenses': 'Spending',
+    '/expenses': 'Expenses',
     '/reports': 'Reports',
     '/settings': 'Settings'
   };

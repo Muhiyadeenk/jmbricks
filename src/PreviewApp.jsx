@@ -8,7 +8,7 @@ import {products,sales,purchases,expenses,production,weekly,monthly,previewDate}
 import './styles.css';
 import Reports from './operations/Reports';
 import {sampleReportSnapshot} from './sampleReports';
-const navigation=[['Dashboard','/',LayoutDashboard],['Sales','/sales',ShoppingBag],['Purchases','/purchases',ShoppingCart],['Stock','/stock',Package],['Production','/production',Factory],['Spending','/expenses',Wallet],['Reports','/reports',ChartNoAxesCombined],['Settings','/settings',Settings]];
+const navigation=[['Dashboard','/',LayoutDashboard],['Sales','/sales',ShoppingBag],['Purchases','/purchases',ShoppingCart],['Stock','/stock',Package],['Production','/production',Factory],['Expenses','/expenses',Wallet],['Reports','/reports',ChartNoAxesCombined],['Settings','/settings',Settings]];
 const bottomNavPages=[['Dashboard','/',LayoutDashboard],['Sales','/sales',ShoppingBag],['Production','/production',Factory],['Stock','/stock',Package]];
 const status=p=>p.stock===0?'Out of Stock':p.stock<=p.min?'Low Stock':'In Stock';
 export default function PreviewApp(){
@@ -95,7 +95,7 @@ export default function PreviewApp(){
                     <span>{getGreeting()}</span>
                   </div>
                   <h1 className="dashboard-greeting-title">Welcome to JM BRICKS Business Management</h1>
-                  <p className="dashboard-greeting-sub">Track daily production, sales, stock, and business spending.</p>
+                  <p className="dashboard-greeting-sub">Track daily production, sales, stock, and business expenses.</p>
                 </div>
                 <div className="dashboard-banner-right">
                   <div className="dashboard-date-badge">
